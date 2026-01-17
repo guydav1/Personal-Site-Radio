@@ -66,7 +66,8 @@
 
     <script>
 
-        let selectedChannel = 0;
+        // Load saved channel from localStorage, default to 0 if not found
+        let selectedChannel = parseInt(localStorage.getItem('lastSelectedChannel')) || 0;
         let player = document.getElementById("player")
         const channels = [
             { id: 0, name: "Glgltz", src: "https://glzwizzlv.bynetcdn.com/glglz_mp3" },
@@ -87,6 +88,8 @@
             let src = channels.find(channel => channel.id == channelId).src;
             player.src = src
             selectedChannel = channelId;
+            // Save selected channel to localStorage
+            localStorage.setItem('lastSelectedChannel', channelId.toString());
             changeTitle(channelId);
         }
 
@@ -115,6 +118,11 @@
 
         }
 
+        // Validate that the saved channel ID exists in the channels array
+        if (selectedChannel < 0 || selectedChannel >= channels.length) {
+            selectedChannel = 0;
+        }
+        
         updateSource(selectedChannel);
         setControls();
         player.volume = 0.4;
