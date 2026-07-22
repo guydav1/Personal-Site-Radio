@@ -879,122 +879,87 @@
         }
 
         function triggerUrlDownload(url) {
-            // Direct MP3 CDN links send Content-Disposition: attachment.
-            const a = document.createElement('a');
-            a.href = url;
-            a.rel = 'noopener';
-            a.target = '_blank';
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-        }
-
-        async function tryPipedAudioDownload(videoId, filename) {
-            for (const base of PIPED_INSTANCES) {
-                try {
-                    const response = await fetch(`${base}/streams/${videoId}`);
-                    if (!response.ok) continue;
-                    const data = await response.json();
-                    const audio = (data.audioStreams || [])
-                        .slice()
-                        .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
-                    if (!audio || !audio.url) continue;
-
-                    const audioRes = await fetch(audio.url);
-                    if (!audioRes.ok) continue;
-                    const blob = await audioRes.blob();
-                    if (blob.size < 10000) continue;
-                    triggerBlobDownload(blob, filename);
-                    return true;
-                } catch (err) {
-                    // Try next instance.
-                }
-            }
-            return false;
+            // Hidden iframe keeps the radio page open while the attachment downloads.
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = url;
+            document.body.appendChild(iframe);
+            setTimeout(() => iframe.remove(), 60000);
         }
 
         function sleep(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
         }
 
-        async function startLoaderJob(youtubeUrl) {
-            const startUrl = 'https://loader.to/ajax/download.php?format=mp3&url='
-                + encodeURIComponent(youtubeUrl);
+        function parseLoaderStart(text) {
+            const data = extractJsonObject(text);
+            if (data && data.progress_url) return data;
 
-            // 1) Direct (usually blocked by CORS from github.io)
+            const progressMatch = text.match(/"progress_url"\s*:\s*"((?:\\.|[^"\\])*)"/);
+            if (!progressMatch) return null;
             try {
-                const direct = await fetch(startUrl);
-                if (direct.ok) {
-                    const data = await direct.json();
-                    if (data && data.progress_url) return data;
-                }
+                return {
+                    progress_url: JSON.parse('"' + progressMatch[1] + '"')
+                };
             } catch (err) {
-                // Expected in browser.
+                return null;
             }
-
-            // 2) Reader proxy that returns the JSON body as text
-            const proxies = [
-                {
-                    url: 'https://r.jina.ai/' + startUrl,
-                    headers: { Accept: 'text/plain', 'X-Timeout': '45' },
-                    parse: text => extractJsonObject(text)
-                },
-                {
-                    url: 'https://api.allorigins.win/raw?url=' + encodeURIComponent(startUrl),
-                    headers: {},
-                    parse: text => {
-                        try { return JSON.parse(text); } catch (e) { return extractJsonObject(text); }
-                    }
-                }
-            ];
-
-            let lastError = null;
-            for (const proxy of proxies) {
-                try {
-                    const response = await fetch(proxy.url, { headers: proxy.headers });
-                    if (!response.ok) throw new Error('proxy status ' + response.status);
-                    const data = proxy.parse(await response.text());
-                    if (data && data.progress_url) return data;
-                    throw new Error('proxy returned no progress_url');
-                } catch (err) {
-                    lastError = err;
-                }
-            }
-
-            throw lastError || new Error('MP3 converter did not start');
         }
 
-        async function downloadMp3FromYouTube(youtubeUrl, filename, onStatus) {
-            if (onStatus) onStatus('Preparing MP3…');
-            const started = await startLoaderJob(youtubeUrl);
-
-            let downloadUrl = null;
-            for (let i = 0; i < 40; i++) {
-                await sleep(2000);
-                const progress = await fetch(started.progress_url).then(r => r.json());
-                if (progress.download_url) {
-                    downloadUrl = progress.download_url;
-                    break;
+        async function startLoaderJob(youtubeUrl) {
+            // loader.to and Piped stream APIs are CORS-blocked from github.io.
+            // Start the job through a reader proxy that returns the JSON body.
+            const startUrl = 'https://loader.to/ajax/download.php?format=mp3&url='
+                + encodeURIComponent(youtubeUrl);
+            const response = await fetch('https://r.jina.ai/' + startUrl, {
+                headers: {
+                    Accept: 'text/plain',
+                    'X-Timeout': '60',
+                    'X-Respond-Timing': 'network-idle'
                 }
+            });
+            if (!response.ok) throw new Error('MP3 start failed');
+            const started = parseLoaderStart(await response.text());
+            if (!started || !started.progress_url) {
+                throw new Error('MP3 converter did not start');
+            }
+            return started;
+        }
+
+        async function waitForMp3Url(progressUrl, onStatus) {
+            for (let i = 0; i < 45; i++) {
+                await sleep(2000);
+                const progress = await fetch(progressUrl).then(r => r.json());
+                if (progress.download_url) return progress.download_url;
                 if (progress.success === 0 && /error|fail/i.test(progress.text || '')) {
                     throw new Error(progress.text || 'MP3 conversion failed');
                 }
                 if (onStatus && i % 3 === 2) onStatus('Converting to MP3…');
             }
+            throw new Error('MP3 conversion timed out');
+        }
 
-            if (!downloadUrl) throw new Error('MP3 conversion timed out');
-
-            if (onStatus) onStatus('Saving file…');
+        async function saveMp3(downloadUrl, filename) {
             try {
                 const fileRes = await fetch(downloadUrl);
                 if (!fileRes.ok) throw new Error('MP3 fetch failed');
                 const blob = await fileRes.blob();
                 if (blob.size < 10000) throw new Error('MP3 file empty');
                 triggerBlobDownload(blob, filename);
+                return;
             } catch (err) {
-                // Fallback: hit the attachment URL directly (still an MP3, not a website).
+                // Same file URL, browser handles Content-Disposition attachment.
                 triggerUrlDownload(downloadUrl);
             }
+        }
+
+        async function downloadMp3FromYouTube(youtubeUrl, filename, onStatus) {
+            if (onStatus) onStatus('Preparing MP3…');
+            const started = await startLoaderJob(youtubeUrl);
+            if (onStatus) onStatus('Converting to MP3…');
+            const downloadUrl = await waitForMp3Url(started.progress_url, onStatus);
+            if (onStatus) onStatus('Saving file…');
+            await saveMp3(downloadUrl, filename);
             return true;
         }
 
@@ -1015,21 +980,13 @@
                     .replace(/[<>:"/\\|?*]+/g, '')
                     .trim()
                     .slice(0, 80) || 'song';
-                const filename = safeName + '.mp3';
 
-                downloadStatus.textContent = 'Downloading MP3…';
-                const direct = await tryPipedAudioDownload(video.id, filename);
-
-                if (direct) {
-                    downloadStatus.textContent = 'Download started.';
-                } else {
-                    await downloadMp3FromYouTube(
-                        video.url,
-                        filename,
-                        text => { downloadStatus.textContent = text; }
-                    );
-                    downloadStatus.textContent = 'Download started.';
-                }
+                await downloadMp3FromYouTube(
+                    video.url,
+                    safeName + '.mp3',
+                    text => { downloadStatus.textContent = text; }
+                );
+                downloadStatus.textContent = 'Download started.';
             } catch (err) {
                 downloadStatus.textContent = 'Download failed — try again.';
                 console.log(err);
