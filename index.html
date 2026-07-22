@@ -173,7 +173,7 @@
                         <path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31.5 31.5 0 0 0 0 12a31.5 31.5 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31.5 31.5 0 0 0 24 12a31.5 31.5 0 0 0-.5-5.8ZM9.75 15.5v-7l6.5 3.5-6.5 3.5Z"></path>
                     </svg>
                 </button>
-                <button id="identifyBtn" class="icon-btn" type="button" title="Identify song" aria-label="Identify song">
+                <button id="identifyBtn" class="icon-btn" type="button" title="Identify song (AudD — click only)" aria-label="Identify song">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M4 10v4"></path>
                         <path d="M8 7v10"></path>
@@ -203,6 +203,7 @@
         const downloadStatus = document.getElementById('downloadStatus');
         let hlsPlayer = null;
         let awaitingPlayGesture = false;
+        let ytCache = { key: '', video: null };
 
         const channels = [
             {
@@ -226,7 +227,7 @@
                 // Official Kan HLS — avoids StreamTheWorld connection preroll ads.
                 src: 'https://kancdn.medonecdn.net/livehls/oil/kancdn-live/live/radio/kan_88/live.livx/playlist.m3u8?renditions&dvr=7200000',
                 hls: true,
-                // Progressive MP3 for AudD clips (HLS playlist is not raw audio).
+                // Progressive MP3 for identify clips (HLS playlist is not raw audio).
                 clipSrc: 'https://playerservices.streamtheworld.com/api/livestream-redirect/KAN_88.mp3',
                 icy: false,
                 meta: { type: 'kanAcr', channelId: 4 }
@@ -258,19 +259,16 @@
 
         const SOURCE_PRIORITY = {
             official: 4,
-            shazam: 3,
+            identify: 3,
             icy: 2,
             playlist: 1
         };
 
-        const SHAZAM_CLIP_MS = 4500;
-        const SHAZAM_AUTO_DELAY_MS = 8000;
-        const SHAZAM_RETRY_MS = 90000;
+        const IDENTIFY_CLIP_MS = 5000;
 
         let currentSong = null;
         let icyAbort = null;
         let metaPollTimer = null;
-        let shazamTimer = null;
         let downloadBusy = false;
         let identifyBusy = false;
         let metaChannelId = null;
@@ -323,11 +321,11 @@
             if (!song) {
                 if (!force && currentSong) return;
                 currentSong = null;
+                ytCache = { key: '', video: null };
                 songMetaEl.textContent = 'Waiting for song info…';
                 songMetaEl.classList.add('unknown');
                 downloadBtn.disabled = true;
                 youtubeBtn.disabled = true;
-                scheduleShazam(true);
                 return;
             }
 
@@ -338,16 +336,20 @@
                 return;
             }
 
-            currentSong = {
+            const nextSong = {
                 ...song,
                 source,
                 downloadable: song.downloadable !== false
             };
+            if (!currentSong || songCacheKey(currentSong) !== songCacheKey(nextSong)) {
+                ytCache = { key: '', video: null };
+            }
+            currentSong = nextSong;
 
             const label = currentSong.artist
                 ? `${currentSong.artist} — ${currentSong.title}`
                 : currentSong.title;
-            songMetaEl.textContent = source === 'shazam' ? `${label} ✦` : label;
+            songMetaEl.textContent = source === 'identify' ? `${label} ✦` : label;
             songMetaEl.classList.toggle('unknown', !currentSong.downloadable);
             downloadBtn.disabled = downloadBusy || !canDownloadSong(currentSong);
             youtubeBtn.disabled = !canDownloadSong(currentSong);
@@ -359,12 +361,6 @@
                     artist: currentSong.artist || getChannel(selectedChannel).name,
                     album: getChannel(selectedChannel).name
                 });
-            }
-
-            if (canDownloadSong(currentSong) && source !== 'shazam') {
-                clearShazamTimer();
-            } else {
-                scheduleShazam(false);
             }
         }
 
@@ -674,28 +670,23 @@
             metaPollTimer = setInterval(poll, intervalMs);
         }
 
-        function clearShazamTimer() {
-            if (shazamTimer) {
-                clearTimeout(shazamTimer);
-                shazamTimer = null;
-            }
+        function getAuddToken() {
+            return (localStorage.getItem('auddApiToken') || '').trim();
         }
 
-        function needsShazam() {
-            return !canDownloadSong(currentSong);
-        }
-
-        function scheduleShazam(immediate) {
-            clearShazamTimer();
-            if (!needsShazam() || identifyBusy) return;
-
-            const delay = immediate ? SHAZAM_AUTO_DELAY_MS : SHAZAM_RETRY_MS;
-            const channelId = selectedChannel;
-            shazamTimer = setTimeout(() => {
-                if (selectedChannel !== channelId) return;
-                if (!needsShazam()) return;
-                identifyCurrentSong(true).catch(console.log);
-            }, delay);
+        function promptAuddToken(reason) {
+            const message = [
+                reason || 'Identify uses AudD (your own free token, ~300 requests).',
+                '',
+                'Paste api_token from https://dashboard.audd.io',
+                '(stored only in this browser):'
+            ].join('\n');
+            const next = window.prompt(message, getAuddToken());
+            if (next === null) return getAuddToken();
+            const trimmed = next.trim();
+            if (trimmed) localStorage.setItem('auddApiToken', trimmed);
+            else localStorage.removeItem('auddApiToken');
+            return trimmed;
         }
 
         function destroyHls() {
@@ -740,8 +731,87 @@
             player.src = channel.src;
         }
 
-        async function captureStreamClip(streamUrl, durationMs, signal) {
-            // No custom headers — keeps this a simple CORS request.
+        function waitForAbortOrTimeout(ms, signal) {
+            return new Promise((resolve, reject) => {
+                if (signal && signal.aborted) {
+                    reject(new Error('aborted'));
+                    return;
+                }
+
+                let timer = null;
+                const onAbort = () => {
+                    clearTimeout(timer);
+                    reject(new Error('aborted'));
+                };
+
+                timer = setTimeout(() => {
+                    if (signal) signal.removeEventListener('abort', onAbort);
+                    resolve();
+                }, ms);
+
+                if (signal) signal.addEventListener('abort', onAbort, { once: true });
+            });
+        }
+
+        function trimToMpegSync(bytes) {
+            for (let i = 0; i < bytes.length - 1; i++) {
+                if (bytes[i] === 0xff && (bytes[i + 1] & 0xe0) === 0xe0) {
+                    return bytes.subarray(i);
+                }
+            }
+            return bytes;
+        }
+
+        async function capturePlayerClip(durationMs, signal) {
+            const captureFn = player.captureStream || player.mozCaptureStream;
+            if (typeof captureFn !== 'function') {
+                throw new Error('captureStream unsupported');
+            }
+            if (player.paused) {
+                await player.play();
+            }
+
+            const stream = captureFn.call(player);
+            if (!stream || !stream.getAudioTracks().length) {
+                throw new Error('No audio track to capture');
+            }
+
+            const mimeType = [
+                'audio/webm;codecs=opus',
+                'audio/webm',
+                'audio/mp4'
+            ].find(type => window.MediaRecorder && MediaRecorder.isTypeSupported(type)) || '';
+
+            const recorder = new MediaRecorder(
+                stream,
+                mimeType ? { mimeType } : undefined
+            );
+            const chunks = [];
+            recorder.ondataavailable = event => {
+                if (event.data && event.data.size) chunks.push(event.data);
+            };
+
+            const stopped = new Promise((resolve, reject) => {
+                recorder.onstop = resolve;
+                recorder.onerror = () => reject(new Error('MediaRecorder failed'));
+            });
+
+            recorder.start(200);
+            try {
+                await waitForAbortOrTimeout(durationMs, signal);
+            } finally {
+                if (recorder.state !== 'inactive') recorder.stop();
+            }
+            await stopped;
+
+            const blob = new Blob(chunks, {
+                type: recorder.mimeType || mimeType || 'audio/webm'
+            });
+            if (blob.size < 8000) throw new Error('Audio clip too short');
+            return blob;
+        }
+
+        async function captureFetchedClip(streamUrl, durationMs, signal) {
             const response = await fetch(streamUrl, { signal });
             if (!response.ok || !response.body) {
                 throw new Error('Could not capture stream audio');
@@ -762,20 +832,40 @@
                 reader.cancel().catch(() => {});
             }
 
+            const raw = new Uint8Array(await new Blob(chunks).arrayBuffer());
+            const trimmed = trimToMpegSync(raw);
             const type = response.headers.get('content-type') || 'audio/mpeg';
-            const blob = new Blob(chunks, { type: type.split(';')[0] });
-            if (blob.size < 20000) throw new Error('Audio clip too short');
+            const blob = new Blob([trimmed], { type: type.split(';')[0] });
+            if (blob.size < 40000) throw new Error('Audio clip too short');
             return blob;
         }
 
+        async function captureIdentifyClip(channel, durationMs, signal) {
+            try {
+                return await capturePlayerClip(durationMs, signal);
+            } catch (err) {
+                console.log('Player capture failed, falling back to stream fetch', err);
+                return captureFetchedClip(
+                    channel.clipSrc || channel.src,
+                    durationMs,
+                    signal
+                );
+            }
+        }
+
         async function recognizeClip(blob) {
+            const token = getAuddToken();
+            if (!token) throw new Error('missing AudD api_token');
+
             const form = new FormData();
-            const ext = blob.type.includes('mp4') || blob.type.includes('aac') ? 'm4a' : 'mp3';
+            const ext = blob.type.includes('mp4') || blob.type.includes('aac')
+                ? 'm4a'
+                : blob.type.includes('webm')
+                    ? 'webm'
+                    : 'mp3';
             form.append('file', blob, `clip.${ext}`);
             form.append('return', 'apple_music,spotify');
-
-            const token = localStorage.getItem('auddApiToken');
-            if (token) form.append('api_token', token);
+            form.append('api_token', token);
 
             const response = await fetch('https://api.audd.io/', {
                 method: 'POST',
@@ -794,51 +884,65 @@
             return parseStreamTitle(artist ? `${artist} - ${title}` : title);
         }
 
-        async function identifyCurrentSong(auto) {
+        async function identifyCurrentSong() {
             if (identifyBusy) return null;
 
             const channel = getChannel(selectedChannel);
             if (!channel) return null;
 
+            if (!getAuddToken()) {
+                const token = promptAuddToken();
+                if (!token) {
+                    downloadStatus.textContent = 'Add an AudD token to identify.';
+                    return null;
+                }
+            }
+
             identifyBusy = true;
             identifyBtn.disabled = true;
             identifyBtn.classList.add('busy');
             const channelId = channel.id;
-            downloadStatus.textContent = auto
-                ? 'Listening to identify song…'
-                : 'Listening…';
+            downloadStatus.textContent = 'Listening…';
 
             const controller = new AbortController();
-            const kill = setTimeout(() => controller.abort(), SHAZAM_CLIP_MS + 8000);
+            const kill = setTimeout(() => controller.abort(), IDENTIFY_CLIP_MS + 8000);
 
             try {
-                const clip = await captureStreamClip(
-                    channel.clipSrc || channel.src,
-                    SHAZAM_CLIP_MS,
+                const clip = await captureIdentifyClip(
+                    channel,
+                    IDENTIFY_CLIP_MS,
                     controller.signal
                 );
                 if (selectedChannel !== channelId) return null;
 
+                downloadStatus.textContent = 'Looking up…';
                 const song = await recognizeClip(clip);
                 if (selectedChannel !== channelId) return null;
 
                 if (song) {
-                    setSong(song, 'shazam', !auto);
-                    downloadStatus.textContent = auto
-                        ? 'Identified from audio ✦'
-                        : `Identified: ${song.raw}`;
+                    setSong(song, 'identify', true);
+                    downloadStatus.textContent = `Identified: ${song.raw}`;
                     return song;
                 }
 
                 downloadStatus.textContent = 'Could not identify this moment.';
-                scheduleShazam(false);
                 return null;
             } catch (err) {
                 if (selectedChannel === channelId) {
-                    downloadStatus.textContent = auto
-                        ? 'Identify later if metadata stays empty.'
-                        : 'Identify failed — try again in a bit.';
-                    scheduleShazam(false);
+                    const message = String((err && err.message) || err || '');
+                    if (/api_token|authorization failed|limit was reached|missing AudD/i.test(message)) {
+                        downloadStatus.textContent = 'AudD token/limit issue.';
+                        const token = promptAuddToken('AudD rejected the token or quota is empty.');
+                        if (token) {
+                            identifyBusy = false;
+                            identifyBtn.classList.remove('busy');
+                            identifyBtn.disabled = false;
+                            clearTimeout(kill);
+                            return identifyCurrentSong();
+                        }
+                    } else {
+                        downloadStatus.textContent = 'Identify failed — try during the song.';
+                    }
                 }
                 console.log(err);
                 return null;
@@ -898,14 +1002,12 @@
             attachChannelSource(channel);
             selectedChannel = channelId;
             localStorage.setItem('lastSelectedChannel', String(channelId));
-            clearShazamTimer();
             setSong(null, null, true);
             downloadStatus.textContent = '';
             changeTitle(channelId);
             highlightChannel(channelId);
             startIcyMonitor(channel);
             startMetaPoll(channel);
-            scheduleShazam(true);
             tryPlay();
         }
 
@@ -929,54 +1031,141 @@
             return song.artist ? `${song.artist} ${song.title}` : song.title || song.raw;
         }
 
-        function pickYouTubeResult(items, query) {
-            const videos = (items || []).filter(item =>
-                item && (item.type === 'stream' || (item.url && String(item.url).includes('watch?v=')))
-            );
-            if (!videos.length) return null;
+        function songCacheKey(song) {
+            return normalizeMatchText(songQuery(song));
+        }
 
-            const scored = videos.map((video, index) => {
-                const title = String(video.title || '').toLowerCase();
-                const duration = Number(video.duration || video.lengthSeconds || 0) || 0;
-                let score = index;
-                // Prefer short official audio — converts much faster than full concerts.
-                if (/official audio|topic|lyrics|audio/.test(title)) score -= 8;
-                if (/live|concert|mix|playlist|hour|compilation/.test(title)) score += 12;
-                if (duration > 0 && duration <= 420) score -= 4;
-                if (duration > 900) score += 10;
-                return { video, score };
-            });
+        function normalizeMatchText(value) {
+            return String(value || '')
+                .toLowerCase()
+                .normalize('NFKD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
 
-            scored.sort((a, b) => a.score - b.score);
-            const video = scored[0].video;
-            const id = String(video.url || '').replace('/watch?v=', '');
+        function matchTokens(value) {
+            const stop = new Set([
+                'the', 'a', 'an', 'and', 'or', 'feat', 'ft', 'with', 'official',
+                'audio', 'video', 'lyrics', 'lyric', 'hd', 'hq', 'mv'
+            ]);
+            return normalizeMatchText(value)
+                .split(' ')
+                .filter(token => token.length > 1 && !stop.has(token));
+        }
+
+        function tokenCoverage(needles, haystack) {
+            if (!needles.length) return 1;
+            const hit = needles.filter(token => haystack.includes(token)).length;
+            return hit / needles.length;
+        }
+
+        function toYouTubeResult(video, fallbackTitle) {
+            const id = String(video.url || '')
+                .replace(/^.*watch\?v=/, '')
+                .replace(/&.*$/, '');
+            if (!id) return null;
             return {
                 id,
-                title: video.title || query,
-                url: `https://www.youtube.com/watch?v=${id}`
+                title: video.title || fallbackTitle,
+                url: `https://www.youtube.com/watch?v=${id}`,
+                uploader: video.uploaderName || video.uploader || '',
+                duration: Number(video.duration || 0) || 0
             };
         }
 
-        async function searchYouTube(query) {
+        function scoreYouTubeCandidate(video, song) {
+            const title = normalizeMatchText(video.title);
+            const uploader = normalizeMatchText(video.uploaderName || video.uploader);
+            const haystack = `${title} ${uploader}`;
+            const artistTokens = matchTokens(song.artist || '');
+            const titleTokens = matchTokens(song.title || song.raw || '');
+            const titleCov = tokenCoverage(titleTokens, haystack);
+            const artistCov = tokenCoverage(artistTokens, haystack);
+            const artistInUploader = artistTokens.length
+                ? tokenCoverage(artistTokens, uploader)
+                : 0;
+
+            let score = titleCov * 45 + artistCov * 30;
+            if (artistInUploader >= 0.8) score += 18;
+            if (/official audio|\btopic\b/.test(title) || / topic$/.test(uploader)) score += 22;
+            if (/official (music )?video|\bvevo\b/.test(`${title} ${uploader}`)) score += 14;
+            if (/\baudio\b/.test(title) && !/\blive\b/.test(title)) score += 8;
+
+            if (/\blive\b|concert|session|unplugged|tour|festival|performance|from the/.test(title)) {
+                score -= 40;
+            }
+            if (/\bcover\b|karaoke|remix|slowed|nightcore|sped up|8d audio|mashup|tribute|reaction|instrumental/.test(title)) {
+                score -= 35;
+            }
+            if (/lyrics?/.test(title)) score -= 6;
+
+            const duration = Number(video.duration || 0) || 0;
+            if (duration > 0 && duration < 90) score -= 18;
+            if (duration >= 120 && duration <= 480) score += 10;
+            if (duration > 720) score -= 25;
+
+            const views = Number(video.views || 0) || 0;
+            if (views > 0) score += Math.min(10, Math.log10(views + 1));
+
+            return { video, score, titleCov, artistCov };
+        }
+
+        function pickYouTubeResult(items, song) {
+            const videos = (items || []).filter(item =>
+                item && (item.type === 'stream' || item.type === 'musicSong' || (item.url && String(item.url).includes('watch?v=')))
+            );
+            if (!videos.length) return null;
+
+            const scored = videos
+                .map(video => scoreYouTubeCandidate(video, song))
+                .filter(entry => {
+                    if (entry.titleCov < 0.55) return false;
+                    // If we know the artist, require at least a partial artist match.
+                    if (matchTokens(song.artist || '').length && entry.artistCov < 0.34) return false;
+                    return true;
+                })
+                .sort((a, b) => b.score - a.score);
+
+            if (!scored.length || scored[0].score < 40) return null;
+            return toYouTubeResult(scored[0].video, songQuery(song));
+        }
+
+        async function searchYouTube(song) {
+            const query = songQuery(song);
+            const key = songCacheKey(song);
+            if (ytCache.key === key && ytCache.video) return ytCache.video;
+
             let lastError = null;
-            const queries = [`${query} official audio`, query];
+            const searches = [
+                { q: query, filter: 'music_songs' },
+                { q: `${query} official audio`, filter: 'videos' },
+                { q: query, filter: 'videos' }
+            ];
 
             for (const base of PIPED_INSTANCES) {
-                // Race both queries on this instance — keep the first usable hit.
-                const attempts = queries.map(async q => {
-                    const url = `${base}/search?q=${encodeURIComponent(q)}&filter=videos`;
+                const settled = await Promise.allSettled(searches.map(async search => {
+                    const url = `${base}/search?q=${encodeURIComponent(search.q)}&filter=${search.filter}`;
                     const response = await fetch(url);
                     if (!response.ok) throw new Error('search failed');
                     const data = await response.json();
-                    const video = pickYouTubeResult(data.items || data, query);
-                    if (!video) throw new Error('no match');
-                    return video;
-                });
+                    return data.items || data || [];
+                }));
 
-                try {
-                    return await Promise.any(attempts);
-                } catch (err) {
-                    lastError = err;
+                const candidates = [];
+                for (const result of settled) {
+                    if (result.status === 'fulfilled') {
+                        candidates.push(...result.value);
+                    } else {
+                        lastError = result.reason;
+                    }
+                }
+
+                const best = pickYouTubeResult(candidates, song);
+                if (best) {
+                    ytCache = { key, video: best };
+                    return best;
                 }
             }
 
@@ -1042,10 +1231,11 @@
                 }
                 if (onStatus) {
                     const pct = Number(progress.progress);
+                    // Conversion runs on an external service; % is their queue/work, not local speed.
                     if (Number.isFinite(pct) && pct > 0) {
-                        onStatus(`Converting to MP3… ${Math.min(99, Math.round(pct))}%`);
+                        onStatus(`Waiting on converter… ${Math.min(99, Math.round(pct))}%`);
                     } else if (i === 0 || i % 3 === 0) {
-                        onStatus(progress.text || 'Converting to MP3…');
+                        onStatus(progress.text || 'Waiting on converter…');
                     }
                 }
             }
@@ -1073,7 +1263,7 @@
 
             try {
                 const query = songQuery(currentSong);
-                const video = await searchYouTube(query);
+                const video = await searchYouTube(currentSong);
                 downloadStatus.textContent = `Found: ${video.title}`;
 
                 const safeName = (currentSong.raw || query)
@@ -1098,14 +1288,14 @@
         }
 
         downloadBtn.addEventListener('click', downloadCurrentSong);
-        identifyBtn.addEventListener('click', () => identifyCurrentSong(false));
+        identifyBtn.addEventListener('click', () => identifyCurrentSong());
 
         youtubeBtn.addEventListener('click', async () => {
             if (!canDownloadSong(currentSong)) return;
             youtubeBtn.disabled = true;
             downloadStatus.textContent = 'Opening YouTube…';
             try {
-                const video = await searchYouTube(songQuery(currentSong));
+                const video = await searchYouTube(currentSong);
                 window.open(video.url, '_blank', 'noopener,noreferrer');
                 downloadStatus.textContent = video.title;
             } catch (err) {
