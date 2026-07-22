@@ -19,7 +19,8 @@
             margin: 0 auto;
             padding: 1% 1.5em;
             margin-top: 5%;
-            width: 300px;
+            width: 380px;
+            max-width: calc(100% - 2em);
             background-color: white;
             border-radius: 5px;
             box-shadow: 1px 1px 5px rgb(139, 139, 139);
@@ -119,29 +120,57 @@
         }
 
         #channels {
-            line-height: 2em;
             list-style-type: none;
             padding: 0;
             margin: 0 0 1em;
         }
 
-        li {
+        #channels li {
             text-align: center;
             background-color: rgba(0, 0, 0, 0.2);
-            width: 200px;
-            padding: 5px;
-            margin: 10px auto;
+            width: auto;
+            max-width: 100%;
+            padding: 0.55em 0.7em;
+            margin: 0.55em 0;
             border-radius: 5px;
+            line-height: 1.25;
         }
 
-        li:hover {
+        #channels li:hover {
             background-color: rgba(0, 0, 0, 0.1);
             cursor: pointer;
         }
 
-        li.active {
+        #channels li.active {
             background-color: rgba(0, 0, 0, 0.45);
             color: #fff;
+        }
+
+        .channel-name {
+            display: block;
+            font-weight: 600;
+        }
+
+        .channel-np {
+            display: block;
+            margin-top: 0.28em;
+            font-size: 0.78em;
+            line-height: 1.3;
+            color: #444;
+            word-break: break-word;
+        }
+
+        .channel-np.unknown {
+            color: #888;
+            font-style: italic;
+        }
+
+        #channels li.active .channel-np {
+            color: rgba(255, 255, 255, 0.88);
+        }
+
+        #channels li.active .channel-np.unknown {
+            color: rgba(255, 255, 255, 0.65);
         }
 
         audio {
@@ -265,13 +294,23 @@
         let metaPollTimer = null;
         let downloadBusy = false;
         let identifyBusy = false;
-        let metaChannelId = null;
+        const channelSongs = {};
 
         const channelsList = document.getElementById('channels');
         channels.forEach(channel => {
             const li = document.createElement('li');
-            li.textContent = channel.name;
             li.dataset.id = String(channel.id);
+
+            const nameEl = document.createElement('span');
+            nameEl.className = 'channel-name';
+            nameEl.textContent = channel.name;
+
+            const npEl = document.createElement('span');
+            npEl.className = 'channel-np unknown';
+            npEl.textContent = channel.meta || channel.icy ? '…' : 'No metadata';
+
+            li.appendChild(nameEl);
+            li.appendChild(npEl);
             li.addEventListener('click', () => updateSource(channel.id));
             channelsList.appendChild(li);
         });
@@ -311,7 +350,64 @@
             return priority;
         }
 
-        function setSong(song, source, force) {
+        function formatSongLabel(song) {
+            if (!song) return '';
+            const label = song.artist
+                ? `${song.artist} — ${song.title}`
+                : (song.title || song.raw || '');
+            return song.source === 'identify' ? `${label} ✦` : label;
+        }
+
+        function renderChannelNowPlaying(channelId) {
+            const npEl = channelsList.querySelector(
+                `li[data-id="${channelId}"] .channel-np`
+            );
+            if (!npEl) return;
+
+            const song = channelSongs[channelId];
+            if (!song) {
+                const channel = getChannel(channelId);
+                npEl.textContent = channel && (channel.meta || channel.icy)
+                    ? '…'
+                    : 'No metadata';
+                npEl.classList.add('unknown');
+                return;
+            }
+
+            npEl.textContent = formatSongLabel(song);
+            npEl.classList.toggle('unknown', song.downloadable === false);
+        }
+
+        function setChannelSong(channelId, song, source, force) {
+            const id = Number(channelId);
+            if (!song) {
+                if (!force && channelSongs[id]) return false;
+                delete channelSongs[id];
+                renderChannelNowPlaying(id);
+                if (id === selectedChannel) applySelectedSong(null, null, true);
+                return true;
+            }
+
+            const nextSong = {
+                ...song,
+                source,
+                downloadable: song.downloadable !== false
+            };
+            const prev = channelSongs[id];
+            const nextPriority = songPriority(nextSong, source);
+            const prevPriority = songPriority(prev);
+            const sameSong = prev && songCacheKey(prev) === songCacheKey(nextSong);
+
+            if (!force && prev && nextPriority < prevPriority) return false;
+            if (!force && sameSong && nextPriority === prevPriority) return false;
+
+            channelSongs[id] = nextSong;
+            renderChannelNowPlaying(id);
+            if (id === selectedChannel) applySelectedSong(nextSong, source, true);
+            return true;
+        }
+
+        function applySelectedSong(song, source, force) {
             if (!song) {
                 if (!force && currentSong) return;
                 currentSong = null;
@@ -320,26 +416,13 @@
                 songMetaEl.classList.add('unknown');
                 downloadBtn.disabled = true;
                 youtubeBtn.disabled = true;
-                return;
-            }
-
-            const nextPriority = songPriority(song, source);
-            const currentPriority = songPriority(currentSong);
-            const sameSong = currentSong &&
-                songCacheKey(currentSong) === songCacheKey({ ...song, source });
-
-            // Never let a lower-priority source overwrite, unless forcing.
-            // Same/higher priority always refreshes so tracks can advance.
-            if (!force && currentSong && nextPriority < currentPriority) {
-                return;
-            }
-            if (!force && sameSong && nextPriority === currentPriority) {
+                changeTitle(selectedChannel);
                 return;
             }
 
             const nextSong = {
                 ...song,
-                source,
+                source: source || song.source,
                 downloadable: song.downloadable !== false
             };
             if (!currentSong || songCacheKey(currentSong) !== songCacheKey(nextSong)) {
@@ -347,22 +430,25 @@
             }
             currentSong = nextSong;
 
-            const label = currentSong.artist
-                ? `${currentSong.artist} — ${currentSong.title}`
-                : currentSong.title;
-            songMetaEl.textContent = source === 'identify' ? `${label} ✦` : label;
+            songMetaEl.textContent = formatSongLabel(currentSong);
             songMetaEl.classList.toggle('unknown', !currentSong.downloadable);
             downloadBtn.disabled = downloadBusy || !canDownloadSong(currentSong);
             youtubeBtn.disabled = !canDownloadSong(currentSong);
             changeTitle(selectedChannel);
 
             if (navigator.mediaSession) {
+                const channel = getChannel(selectedChannel);
                 navigator.mediaSession.metadata = new MediaMetadata({
                     title: currentSong.title || currentSong.raw,
-                    artist: currentSong.artist || getChannel(selectedChannel).name,
-                    album: getChannel(selectedChannel).name
+                    artist: currentSong.artist || (channel && channel.name) || '',
+                    album: (channel && channel.name) || ''
                 });
             }
+        }
+
+        // Selected-channel helper used by ICY / identify / legacy call sites.
+        function setSong(song, source, force) {
+            setChannelSong(selectedChannel, song, source, force);
         }
 
         function highlightChannel(channelId) {
@@ -679,31 +765,30 @@
             }
         }
 
-        function startMetaPoll(channel) {
+        async function pollChannelOfficial(channel) {
+            if (!channel || !channel.meta) return;
+            try {
+                const song = await fetchOfficialSong(channel);
+                if (song) setChannelSong(channel.id, song, 'official');
+            } catch (err) {
+                // Official lookup is best-effort.
+            }
+        }
+
+        function startAllMetaPoll() {
             if (metaPollTimer) {
                 clearInterval(metaPollTimer);
                 metaPollTimer = null;
             }
 
-            metaChannelId = channel.id;
-            if (!channel.meta) return;
-
-            const source = 'official';
-            const intervalMs = 15000;
-
-            const poll = async () => {
-                if (metaChannelId !== channel.id) return;
-                try {
-                    const song = await fetchOfficialSong(channel);
-                    if (metaChannelId !== channel.id) return;
-                    if (song) setSong(song, source);
-                } catch (err) {
-                    // Official lookup is best-effort.
-                }
+            const pollAll = () => {
+                channels.forEach(channel => {
+                    pollChannelOfficial(channel);
+                });
             };
 
-            poll();
-            metaPollTimer = setInterval(poll, intervalMs);
+            pollAll();
+            metaPollTimer = setInterval(pollAll, 15000);
         }
 
         function getAuddToken() {
@@ -1038,12 +1123,17 @@
             attachChannelSource(channel);
             selectedChannel = channelId;
             localStorage.setItem('lastSelectedChannel', String(channelId));
-            setSong(null, null, true);
+
+            const cached = channelSongs[channelId];
+            if (cached) applySelectedSong(cached, cached.source, true);
+            else applySelectedSong(null, null, true);
+
             downloadStatus.textContent = '';
             changeTitle(channelId);
             highlightChannel(channelId);
             startIcyMonitor(channel);
-            startMetaPoll(channel);
+            // Refresh this station immediately; others keep the shared poller.
+            pollChannelOfficial(channel);
             tryPlay();
         }
 
@@ -1535,6 +1625,7 @@
 
         player.volume = 0.4;
         setControls();
+        startAllMetaPoll();
         updateSource(selectedChannel);
     </script>
 </body>
