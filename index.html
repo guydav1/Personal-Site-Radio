@@ -205,30 +205,36 @@
                 id: 0,
                 name: 'Glgltz',
                 src: 'https://glzwizzlv.bynetcdn.com/glglz_mp3',
+                // Only this CDN allows the Icy-MetaData request header from browsers.
+                icy: true,
                 meta: { type: 'radioMenu', slug: 'glz-co-il-galgalatz' }
             },
             {
                 id: 1,
                 name: 'Eco',
                 src: 'https://eco01.livecdn.biz/ecolive/99fm_aac/icecast.audio',
+                icy: false,
                 meta: { type: 'ecoFirestore' }
             },
             {
                 id: 2,
                 name: '88FM',
                 src: 'https://23543.live.streamtheworld.com/KAN_88.mp3?dist=coolsite',
+                icy: false,
                 meta: { type: 'kanAcr', channelId: 4 }
             },
             {
                 id: 3,
                 name: '107.5FM',
                 src: 'https://cdn88.mediacast.co.il/1075-hfa-live/radiohaifa/icecast.audio',
+                icy: false,
                 meta: null
             },
             {
                 id: 4,
                 name: '106FM',
                 src: 'https://live.ecast.co.il/stream/galimlive',
+                icy: false,
                 meta: {
                     type: 'ecastPlayerInfo',
                     url: 'https://live.ecast.co.il/AudioPlayer/galimlive/playerInfo'
@@ -371,10 +377,7 @@
 
         async function readIcyMetadata(url, signal) {
             const response = await fetch(url, {
-                headers: {
-                    'Icy-MetaData': '1',
-                    'User-Agent': 'PersonalRadio/1.0'
-                },
+                headers: { 'Icy-MetaData': '1' },
                 signal
             });
 
@@ -462,14 +465,21 @@
 
         function startIcyMonitor(channel) {
             if (icyAbort) icyAbort.abort();
-            icyAbort = new AbortController();
+            icyAbort = null;
 
+            // Custom Icy-MetaData header triggers CORS preflight; only use where allowed.
+            if (!channel.icy) return;
+
+            icyAbort = new AbortController();
             const run = async () => {
                 while (!icyAbort.signal.aborted) {
                     try {
                         await readIcyMetadata(channel.src, icyAbort.signal);
                     } catch (err) {
                         if (icyAbort.signal.aborted) return;
+                        // Stop retry storms if this CDN rejects the header.
+                        console.log('ICY metadata unavailable for', channel.name);
+                        return;
                     }
                     if (icyAbort.signal.aborted) return;
                     await new Promise(r => setTimeout(r, 5000));
@@ -681,10 +691,8 @@
         }
 
         async function captureStreamClip(streamUrl, durationMs, signal) {
-            const response = await fetch(streamUrl, {
-                headers: { 'User-Agent': 'PersonalRadio/1.0' },
-                signal
-            });
+            // No custom headers — keeps this a simple CORS request.
+            const response = await fetch(streamUrl, { signal });
             if (!response.ok || !response.body) {
                 throw new Error('Could not capture stream audio');
             }
@@ -867,7 +875,18 @@
             document.body.appendChild(a);
             a.click();
             a.remove();
-            URL.revokeObjectURL(objectUrl);
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+        }
+
+        function triggerUrlDownload(url) {
+            // Direct MP3 CDN links send Content-Disposition: attachment.
+            const a = document.createElement('a');
+            a.href = url;
+            a.rel = 'noopener';
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
         }
 
         async function tryPipedAudioDownload(videoId, filename) {
@@ -898,33 +917,67 @@
             return new Promise(resolve => setTimeout(resolve, ms));
         }
 
-        async function downloadMp3FromYouTube(youtubeUrl, filename, onStatus) {
+        async function startLoaderJob(youtubeUrl) {
             const startUrl = 'https://loader.to/ajax/download.php?format=mp3&url='
                 + encodeURIComponent(youtubeUrl);
-            // loader.to blocks browser CORS on the start call; reader proxy works.
-            if (onStatus) onStatus('Preparing MP3…');
-            const startText = await fetch('https://r.jina.ai/' + startUrl, {
-                headers: {
-                    Accept: 'text/plain',
-                    'X-Timeout': '45'
-                }
-            }).then(r => {
-                if (!r.ok) throw new Error('MP3 start failed');
-                return r.text();
-            });
 
-            const started = extractJsonObject(startText);
-            if (!started || !started.progress_url) {
-                throw new Error('MP3 converter did not start');
+            // 1) Direct (usually blocked by CORS from github.io)
+            try {
+                const direct = await fetch(startUrl);
+                if (direct.ok) {
+                    const data = await direct.json();
+                    if (data && data.progress_url) return data;
+                }
+            } catch (err) {
+                // Expected in browser.
             }
 
+            // 2) Reader proxy that returns the JSON body as text
+            const proxies = [
+                {
+                    url: 'https://r.jina.ai/' + startUrl,
+                    headers: { Accept: 'text/plain', 'X-Timeout': '45' },
+                    parse: text => extractJsonObject(text)
+                },
+                {
+                    url: 'https://api.allorigins.win/raw?url=' + encodeURIComponent(startUrl),
+                    headers: {},
+                    parse: text => {
+                        try { return JSON.parse(text); } catch (e) { return extractJsonObject(text); }
+                    }
+                }
+            ];
+
+            let lastError = null;
+            for (const proxy of proxies) {
+                try {
+                    const response = await fetch(proxy.url, { headers: proxy.headers });
+                    if (!response.ok) throw new Error('proxy status ' + response.status);
+                    const data = proxy.parse(await response.text());
+                    if (data && data.progress_url) return data;
+                    throw new Error('proxy returned no progress_url');
+                } catch (err) {
+                    lastError = err;
+                }
+            }
+
+            throw lastError || new Error('MP3 converter did not start');
+        }
+
+        async function downloadMp3FromYouTube(youtubeUrl, filename, onStatus) {
+            if (onStatus) onStatus('Preparing MP3…');
+            const started = await startLoaderJob(youtubeUrl);
+
             let downloadUrl = null;
-            for (let i = 0; i < 30; i++) {
+            for (let i = 0; i < 40; i++) {
                 await sleep(2000);
                 const progress = await fetch(started.progress_url).then(r => r.json());
                 if (progress.download_url) {
                     downloadUrl = progress.download_url;
                     break;
+                }
+                if (progress.success === 0 && /error|fail/i.test(progress.text || '')) {
+                    throw new Error(progress.text || 'MP3 conversion failed');
                 }
                 if (onStatus && i % 3 === 2) onStatus('Converting to MP3…');
             }
@@ -932,11 +985,16 @@
             if (!downloadUrl) throw new Error('MP3 conversion timed out');
 
             if (onStatus) onStatus('Saving file…');
-            const fileRes = await fetch(downloadUrl);
-            if (!fileRes.ok) throw new Error('MP3 fetch failed');
-            const blob = await fileRes.blob();
-            if (blob.size < 10000) throw new Error('MP3 file empty');
-            triggerBlobDownload(blob, filename);
+            try {
+                const fileRes = await fetch(downloadUrl);
+                if (!fileRes.ok) throw new Error('MP3 fetch failed');
+                const blob = await fileRes.blob();
+                if (blob.size < 10000) throw new Error('MP3 file empty');
+                triggerBlobDownload(blob, filename);
+            } catch (err) {
+                // Fallback: hit the attachment URL directly (still an MP3, not a website).
+                triggerUrlDownload(downloadUrl);
+            }
             return true;
         }
 
