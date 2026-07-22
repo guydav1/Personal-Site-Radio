@@ -29,9 +29,99 @@
             text-align: center;
         }
 
+        #title {
+            margin: 0 0 0.4em;
+            font-size: 1.4em;
+        }
+
+        .now-playing {
+            margin: 0.5em 0 1em;
+            padding: 0.75em;
+            background: rgba(0, 0, 0, 0.06);
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .now-playing-label {
+            font-size: 0.75em;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 0.35em;
+        }
+
+        #songMeta {
+            font-size: 1em;
+            line-height: 1.35em;
+            min-height: 1.35em;
+            word-break: break-word;
+        }
+
+        #songMeta.unknown {
+            color: #888;
+            font-style: italic;
+        }
+
+        .meta-actions {
+            display: flex;
+            gap: 0.15em;
+            margin-top: 0.65em;
+            justify-content: center;
+            align-items: center;
+        }
+
+        button.icon-btn {
+            border: none;
+            background: transparent;
+            color: #777;
+            width: 2rem;
+            height: 2rem;
+            padding: 0;
+            border-radius: 999px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.15s ease, background 0.15s ease;
+        }
+
+        button.icon-btn svg {
+            width: 1.05rem;
+            height: 1.05rem;
+            display: block;
+        }
+
+        button.icon-btn:hover:not(:disabled) {
+            color: #222;
+            background: rgba(0, 0, 0, 0.06);
+        }
+
+        button.icon-btn:disabled {
+            opacity: 0.28;
+            cursor: default;
+        }
+
+        button.icon-btn.busy {
+            color: #222;
+            animation: pulse 1s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            50% { opacity: 0.35; }
+        }
+
+        #downloadStatus {
+            margin-top: 0.45em;
+            font-size: 0.75em;
+            color: #888;
+            min-height: 1.1em;
+        }
+
         #channels {
             line-height: 2em;
             list-style-type: none;
+            padding: 0;
+            margin: 0 0 1em;
         }
 
         li {
@@ -39,13 +129,22 @@
             background-color: rgba(0, 0, 0, 0.2);
             width: 200px;
             padding: 5px;
-            margin: 10px 0;
+            margin: 10px auto;
             border-radius: 5px;
         }
 
         li:hover {
             background-color: rgba(0, 0, 0, 0.1);
             cursor: pointer;
+        }
+
+        li.active {
+            background-color: rgba(0, 0, 0, 0.45);
+            color: #fff;
+        }
+
+        audio {
+            width: 100%;
         }
     </style>
 </head>
@@ -56,80 +155,863 @@
         <div class="header">
             <h1 id="title">Playing: ...</h1>
         </div>
+
+        <div class="now-playing">
+            <div class="now-playing-label">Now playing</div>
+            <div id="songMeta" class="unknown">Waiting for song info…</div>
+            <div class="meta-actions">
+                <button id="downloadBtn" class="icon-btn" type="button" title="Download MP3" aria-label="Download MP3" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 3v12"></path>
+                        <path d="m7 11 5 5 5-5"></path>
+                        <path d="M5 21h14"></path>
+                    </svg>
+                </button>
+                <button id="youtubeBtn" class="icon-btn" type="button" title="Open on YouTube" aria-label="Open on YouTube" disabled>
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31.5 31.5 0 0 0 0 12a31.5 31.5 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31.5 31.5 0 0 0 24 12a31.5 31.5 0 0 0-.5-5.8ZM9.75 15.5v-7l6.5 3.5-6.5 3.5Z"></path>
+                    </svg>
+                </button>
+                <button id="identifyBtn" class="icon-btn" type="button" title="Identify song" aria-label="Identify song">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M4 10v4"></path>
+                        <path d="M8 7v10"></path>
+                        <path d="M12 4v16"></path>
+                        <path d="M16 7v10"></path>
+                        <path d="M20 10v4"></path>
+                    </svg>
+                </button>
+            </div>
+            <div id="downloadStatus"></div>
+        </div>
+
         <div class="body">
             <ul id="channels"></ul>
         </div>
         <audio id="player" controls autoplay></audio>
-
     </div>
 
-
     <script>
+        let selectedChannel = parseInt(localStorage.getItem('lastSelectedChannel'), 10) || 0;
+        const player = document.getElementById('player');
+        const songMetaEl = document.getElementById('songMeta');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const youtubeBtn = document.getElementById('youtubeBtn');
+        const identifyBtn = document.getElementById('identifyBtn');
+        const downloadStatus = document.getElementById('downloadStatus');
 
-        // Load saved channel from localStorage, default to 0 if not found
-        let selectedChannel = parseInt(localStorage.getItem('lastSelectedChannel')) || 0;
-        let player = document.getElementById("player")
         const channels = [
-            { id: 0, name: "Glgltz", src: "https://glzwizzlv.bynetcdn.com/glglz_mp3" },
-            { id: 1, name: "Eco", src: "https://eco-live.mediacast.co.il/99fm_aac" },
-            { id: 2, name: "88FM", src: "https://23543.live.streamtheworld.com/KAN_88.mp3?dist=coolsite" },
-            { id: 3, name: "107.5FM", src: "https://1075.livecdn.biz/radiohaifa" },
-            { id :4, name: "106FM", src: "https://live.ecast.co.il/stream/galimlive" }
-        ]
+            {
+                id: 0,
+                name: 'Glgltz',
+                src: 'https://glzwizzlv.bynetcdn.com/glglz_mp3',
+                meta: { type: 'radioMenu', slug: 'glz-co-il-galgalatz' }
+            },
+            {
+                id: 1,
+                name: 'Eco',
+                src: 'https://eco01.livecdn.biz/ecolive/99fm_aac/icecast.audio',
+                meta: { type: 'ecoFirestore' }
+            },
+            {
+                id: 2,
+                name: '88FM',
+                src: 'https://23543.live.streamtheworld.com/KAN_88.mp3?dist=coolsite',
+                meta: { type: 'kanAcr', channelId: 4 }
+            },
+            {
+                id: 3,
+                name: '107.5FM',
+                src: 'https://cdn88.mediacast.co.il/1075-hfa-live/radiohaifa/icecast.audio',
+                meta: null
+            },
+            {
+                id: 4,
+                name: '106FM',
+                src: 'https://live.ecast.co.il/stream/galimlive',
+                meta: {
+                    type: 'ecastPlayerInfo',
+                    url: 'https://live.ecast.co.il/AudioPlayer/galimlive/playerInfo'
+                }
+            }
+        ];
 
-        const channelsList = document.getElementById("channels");
+        const PIPED_INSTANCES = [
+            'https://api.piped.private.coffee',
+            'https://pipedapi.adminforge.de',
+            'https://pipedapi.kavin.rocks'
+        ];
 
+        const SOURCE_PRIORITY = {
+            official: 4,
+            shazam: 3,
+            icy: 2,
+            playlist: 1
+        };
+
+        const SHAZAM_CLIP_MS = 4500;
+        const SHAZAM_AUTO_DELAY_MS = 8000;
+        const SHAZAM_RETRY_MS = 90000;
+
+        let currentSong = null;
+        let icyAbort = null;
+        let metaPollTimer = null;
+        let shazamTimer = null;
+        let downloadBusy = false;
+        let identifyBusy = false;
+        let metaChannelId = null;
+
+        const channelsList = document.getElementById('channels');
         channels.forEach(channel => {
-            channelsList.innerHTML += `<li onclick="updateSource('${channel.id}')">${channel.name}</li>`
+            const li = document.createElement('li');
+            li.textContent = channel.name;
+            li.dataset.id = String(channel.id);
+            li.addEventListener('click', () => updateSource(channel.id));
+            channelsList.appendChild(li);
         });
 
-
-        let updateSource = (channelId) => {
-            let src = channels.find(channel => channel.id == channelId).src;
-            player.src = src
-            selectedChannel = channelId;
-            // Save selected channel to localStorage
-            localStorage.setItem('lastSelectedChannel', channelId.toString());
-            changeTitle(channelId);
+        function getChannel(channelId) {
+            return channels.find(channel => channel.id == channelId);
         }
 
-        let changeTitle = (channelId) => {
-            let channel = channels.find(channel => channel.id == channelId);
+        function parseStreamTitle(raw) {
+            const title = (raw || '').trim();
+            if (!title) return null;
 
-            let t = "Playing: " + channel.name;
-            document.getElementById("title").innerText = t;
-            document.title = t
+            const parts = title.split(/\s[-–—]\s/);
+            if (parts.length >= 2) {
+                return {
+                    raw: title,
+                    artist: parts[0].trim(),
+                    title: parts.slice(1).join(' - ').trim()
+                };
+            }
+
+            return { raw: title, artist: '', title };
+        }
+
+        function canDownloadSong(song) {
+            return !!(song && song.downloadable !== false && (song.title || song.raw));
+        }
+
+        function songPriority(song, source) {
+            if (!song && !source) return 0;
+            const src = source || (song && song.source);
+            let priority = SOURCE_PRIORITY[src] || 0;
+            // Program-only placeholders shouldn't block Shazam.
+            if (song && song.downloadable === false) {
+                priority = Math.min(priority, 1);
+            }
+            return priority;
+        }
+
+        function setSong(song, source, force) {
+            if (!song) {
+                if (!force && currentSong) return;
+                currentSong = null;
+                songMetaEl.textContent = 'Waiting for song info…';
+                songMetaEl.classList.add('unknown');
+                downloadBtn.disabled = true;
+                youtubeBtn.disabled = true;
+                scheduleShazam(true);
+                return;
+            }
+
+            const nextPriority = songPriority(song, source);
+            const currentPriority = songPriority(currentSong);
+
+            if (!force && currentSong && nextPriority < currentPriority) {
+                return;
+            }
+
+            currentSong = {
+                ...song,
+                source,
+                downloadable: song.downloadable !== false
+            };
+
+            const label = currentSong.artist
+                ? `${currentSong.artist} — ${currentSong.title}`
+                : currentSong.title;
+            songMetaEl.textContent = source === 'shazam' ? `${label} ✦` : label;
+            songMetaEl.classList.toggle('unknown', !currentSong.downloadable);
+            downloadBtn.disabled = downloadBusy || !canDownloadSong(currentSong);
+            youtubeBtn.disabled = !canDownloadSong(currentSong);
+            changeTitle(selectedChannel);
+
+            if (navigator.mediaSession) {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: currentSong.title || currentSong.raw,
+                    artist: currentSong.artist || getChannel(selectedChannel).name,
+                    album: getChannel(selectedChannel).name
+                });
+            }
+
+            if (canDownloadSong(currentSong) && source !== 'shazam') {
+                clearShazamTimer();
+            } else {
+                scheduleShazam(false);
+            }
+        }
+
+        function highlightChannel(channelId) {
+            channelsList.querySelectorAll('li').forEach(li => {
+                li.classList.toggle('active', li.dataset.id === String(channelId));
+            });
+        }
+
+        function changeTitle(channelId) {
+            const channel = getChannel(channelId);
+            const t = 'Playing: ' + channel.name;
+            document.getElementById('title').innerText = t;
+            document.title = currentSong
+                ? `${currentSong.title} · ${channel.name}`
+                : t;
+        }
+
+        async function readIcyMetadata(url, signal) {
+            const response = await fetch(url, {
+                headers: {
+                    'Icy-MetaData': '1',
+                    'User-Agent': 'PersonalRadio/1.0'
+                },
+                signal
+            });
+
+            const metaInt = parseInt(response.headers.get('icy-metaint') || '0', 10);
+            if (!metaInt || !response.body) {
+                throw new Error('No ICY metadata on stream');
+            }
+
+            const reader = response.body.getReader();
+            let leftover = new Uint8Array(0);
+            let need = metaInt;
+            let phase = 'audio';
+            let metaNeed = 0;
+            let metaParts = [];
+
+            while (!signal.aborted) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                const merged = new Uint8Array(leftover.length + value.length);
+                merged.set(leftover);
+                merged.set(value, leftover.length);
+                leftover = merged;
+
+                let offset = 0;
+                while (true) {
+                    if (phase === 'audio') {
+                        if (leftover.length - offset < need) {
+                            leftover = leftover.slice(offset);
+                            break;
+                        }
+                        offset += need;
+                        phase = 'len';
+                    } else if (phase === 'len') {
+                        if (leftover.length - offset < 1) {
+                            leftover = leftover.slice(offset);
+                            break;
+                        }
+                        metaNeed = leftover[offset] * 16;
+                        offset += 1;
+                        if (metaNeed === 0) {
+                            phase = 'audio';
+                            need = metaInt;
+                        } else {
+                            phase = 'meta';
+                            metaParts = [];
+                        }
+                    } else {
+                        const avail = leftover.length - offset;
+                        if (avail < metaNeed) {
+                            metaParts.push(leftover.slice(offset));
+                            metaNeed -= avail;
+                            leftover = new Uint8Array(0);
+                            break;
+                        }
+
+                        metaParts.push(leftover.slice(offset, offset + metaNeed));
+                        offset += metaNeed;
+
+                        let total = 0;
+                        for (const part of metaParts) total += part.length;
+                        const buf = new Uint8Array(total);
+                        let p = 0;
+                        for (const part of metaParts) {
+                            buf.set(part, p);
+                            p += part.length;
+                        }
+
+                        const text = new TextDecoder()
+                            .decode(buf)
+                            .replace(/\0+$/g, '');
+                        const match = /StreamTitle='([^']*)'/.exec(text);
+                        const parsed = parseStreamTitle(match ? match[1] : '');
+                        if (parsed) setSong(parsed, 'icy');
+
+                        phase = 'audio';
+                        need = metaInt;
+                        metaParts = [];
+                    }
+                }
+            }
+
+            reader.cancel().catch(() => {});
+        }
+
+        function startIcyMonitor(channel) {
+            if (icyAbort) icyAbort.abort();
+            icyAbort = new AbortController();
+
+            const run = async () => {
+                while (!icyAbort.signal.aborted) {
+                    try {
+                        await readIcyMetadata(channel.src, icyAbort.signal);
+                    } catch (err) {
+                        if (icyAbort.signal.aborted) return;
+                    }
+                    if (icyAbort.signal.aborted) return;
+                    await new Promise(r => setTimeout(r, 5000));
+                }
+            };
+
+            run();
+        }
+
+        function firestoreString(fields, key) {
+            return fields && fields[key] && fields[key].stringValue
+                ? fields[key].stringValue.trim()
+                : '';
+        }
+
+        function songFromEcoFields(fields) {
+            const artist = firestoreString(fields, 'artist_name');
+            const title = firestoreString(fields, 'song_name');
+            if (title && !/^unknown$/i.test(title)) {
+                return parseStreamTitle(artist ? `${artist} - ${title}` : title);
+            }
+
+            // Between tracks Eco often only publishes the current program.
+            const program = firestoreString(fields, 'program_name');
+            const broadcaster = firestoreString(fields, 'broadcaster_name');
+            if (!program && !broadcaster) return null;
+            return {
+                raw: [program, broadcaster].filter(Boolean).join(' · '),
+                artist: broadcaster,
+                title: program || broadcaster,
+                downloadable: false
+            };
+        }
+
+        async function fetchEcoSong() {
+            const url = 'https://firestore.googleapis.com/v1/projects/eco-99-production/databases/(default)/documents/streamed_content/program';
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Eco metadata failed');
+                const data = await response.json();
+                return songFromEcoFields(data.fields);
+            } catch (err) {
+                const proxy = await fetch('https://r.jina.ai/' + url, {
+                    headers: { Accept: 'text/plain', 'X-Timeout': '20' }
+                });
+                if (!proxy.ok) throw err;
+                const data = extractJsonObject(await proxy.text());
+                if (!data || !data.fields) throw err;
+                return songFromEcoFields(data.fields);
+            }
+        }
+
+        function extractJsonObject(text) {
+            const start = text.indexOf('{');
+            const end = text.lastIndexOf('}');
+            if (start < 0 || end <= start) return null;
+            try {
+                return JSON.parse(text.slice(start, end + 1));
+            } catch (err) {
+                return null;
+            }
+        }
+
+        async function fetchKanSong(channelId) {
+            const apiUrl = `https://www.kan.org.il/api/arc-cloud/get-live-track-data?channelId=${channelId}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    headers: {
+                        Accept: 'application/json',
+                        Referer: 'https://www.kan.org.il/content/kan/kan-88/'
+                    }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.title && data.title !== 'Unknown') {
+                        const artist = (data.artists || []).join(', ');
+                        return parseStreamTitle(artist ? `${artist} - ${data.title}` : data.title);
+                    }
+                }
+            } catch (err) {
+                // Cloudflare sometimes blocks direct browser calls; try reader proxy.
+            }
+
+            const proxy = await fetch('https://r.jina.ai/' + apiUrl, {
+                headers: {
+                    Accept: 'text/plain',
+                    'X-Timeout': '30',
+                    'X-Respond-Timing': 'network-idle'
+                }
+            });
+            if (!proxy.ok) throw new Error('KAN metadata failed');
+            const data = extractJsonObject(await proxy.text());
+            if (!data || !data.title || data.title === 'Unknown') return null;
+            const artist = (data.artists || []).join(', ');
+            return parseStreamTitle(artist ? `${artist} - ${data.title}` : data.title);
+        }
+
+        async function fetchEcastSong(url) {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('ecast metadata failed');
+            const data = await response.json();
+            return parseStreamTitle(data.nowplaying || '');
+        }
+
+        function parseRadioMenuMarkdown(markdown) {
+            const section = markdown.match(
+                /What playing now[\s\S]*?(?:\n## |\n### Find|\n## Related|$)/i
+            );
+            if (!section) return null;
+
+            const lines = section[0].split('\n');
+            for (const line of lines) {
+                const m = line.match(
+                    /^\*\s+(?:\d{1,2}:\d{2}\s+)?(.+?)\s[-–—]\s(.+?)\s*$/
+                );
+                if (m) {
+                    return parseStreamTitle(`${m[1].trim()} - ${m[2].trim()}`);
+                }
+
+                const solo = line.match(/^\*\s+(?:\d{1,2}:\d{2}\s+)?(.+?)\s*$/);
+                if (solo && !/view playlist/i.test(solo[1])) {
+                    const text = solo[1].trim();
+                    if (text && !/^what playing/i.test(text)) {
+                        return parseStreamTitle(text);
+                    }
+                }
+            }
+            return null;
+        }
+
+        async function fetchRadioMenuSong(slug) {
+            const proxyUrl = 'https://r.jina.ai/https://radio.menu/stations/' + slug + '/';
+            const response = await fetch(proxyUrl, {
+                headers: { Accept: 'text/plain' }
+            });
+            if (!response.ok) throw new Error('radio.menu fetch failed');
+            const markdown = await response.text();
+            return parseRadioMenuMarkdown(markdown);
+        }
+
+        async function fetchOfficialSong(channel) {
+            if (!channel.meta) return null;
+
+            switch (channel.meta.type) {
+                case 'ecoFirestore':
+                    return fetchEcoSong();
+                case 'kanAcr':
+                    return fetchKanSong(channel.meta.channelId);
+                case 'ecastPlayerInfo':
+                    return fetchEcastSong(channel.meta.url);
+                case 'radioMenu':
+                    return fetchRadioMenuSong(channel.meta.slug);
+                default:
+                    return null;
+            }
+        }
+
+        function startMetaPoll(channel) {
+            if (metaPollTimer) {
+                clearInterval(metaPollTimer);
+                metaPollTimer = null;
+            }
+
+            metaChannelId = channel.id;
+            if (!channel.meta) return;
+
+            const source = channel.meta.type === 'radioMenu' ? 'playlist' : 'official';
+            const intervalMs = channel.meta.type === 'radioMenu' ? 45000 : 15000;
+
+            const poll = async () => {
+                if (metaChannelId !== channel.id) return;
+                try {
+                    const song = await fetchOfficialSong(channel);
+                    if (metaChannelId !== channel.id) return;
+                    if (song) setSong(song, source);
+                } catch (err) {
+                    // Official lookup is best-effort.
+                }
+            };
+
+            poll();
+            metaPollTimer = setInterval(poll, intervalMs);
+        }
+
+        function clearShazamTimer() {
+            if (shazamTimer) {
+                clearTimeout(shazamTimer);
+                shazamTimer = null;
+            }
+        }
+
+        function needsShazam() {
+            return !canDownloadSong(currentSong);
+        }
+
+        function scheduleShazam(immediate) {
+            clearShazamTimer();
+            if (!needsShazam() || identifyBusy) return;
+
+            const delay = immediate ? SHAZAM_AUTO_DELAY_MS : SHAZAM_RETRY_MS;
+            const channelId = selectedChannel;
+            shazamTimer = setTimeout(() => {
+                if (selectedChannel !== channelId) return;
+                if (!needsShazam()) return;
+                identifyCurrentSong(true).catch(console.log);
+            }, delay);
+        }
+
+        async function captureStreamClip(streamUrl, durationMs, signal) {
+            const response = await fetch(streamUrl, {
+                headers: { 'User-Agent': 'PersonalRadio/1.0' },
+                signal
+            });
+            if (!response.ok || !response.body) {
+                throw new Error('Could not capture stream audio');
+            }
+
+            const reader = response.body.getReader();
+            const chunks = [];
+            const started = Date.now();
+
+            try {
+                while (Date.now() - started < durationMs) {
+                    if (signal && signal.aborted) throw new Error('aborted');
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                }
+            } finally {
+                reader.cancel().catch(() => {});
+            }
+
+            const type = response.headers.get('content-type') || 'audio/mpeg';
+            const blob = new Blob(chunks, { type: type.split(';')[0] });
+            if (blob.size < 20000) throw new Error('Audio clip too short');
+            return blob;
+        }
+
+        async function recognizeClip(blob) {
+            const form = new FormData();
+            const ext = blob.type.includes('mp4') || blob.type.includes('aac') ? 'm4a' : 'mp3';
+            form.append('file', blob, `clip.${ext}`);
+            form.append('return', 'apple_music,spotify');
+
+            const token = localStorage.getItem('auddApiToken');
+            if (token) form.append('api_token', token);
+
+            const response = await fetch('https://api.audd.io/', {
+                method: 'POST',
+                body: form
+            });
+            if (!response.ok) throw new Error('Recognition request failed');
+
+            const data = await response.json();
+            if (data.status === 'error') {
+                throw new Error((data.error && data.error.error_message) || 'Recognition failed');
+            }
+            if (!data.result || !data.result.title) return null;
+
+            const artist = data.result.artist || '';
+            const title = data.result.title || '';
+            return parseStreamTitle(artist ? `${artist} - ${title}` : title);
+        }
+
+        async function identifyCurrentSong(auto) {
+            if (identifyBusy) return null;
+
+            const channel = getChannel(selectedChannel);
+            if (!channel) return null;
+
+            identifyBusy = true;
+            identifyBtn.disabled = true;
+            identifyBtn.classList.add('busy');
+            const channelId = channel.id;
+            downloadStatus.textContent = auto
+                ? 'Listening to identify song…'
+                : 'Listening…';
+
+            const controller = new AbortController();
+            const kill = setTimeout(() => controller.abort(), SHAZAM_CLIP_MS + 8000);
+
+            try {
+                const clip = await captureStreamClip(
+                    channel.src,
+                    SHAZAM_CLIP_MS,
+                    controller.signal
+                );
+                if (selectedChannel !== channelId) return null;
+
+                const song = await recognizeClip(clip);
+                if (selectedChannel !== channelId) return null;
+
+                if (song) {
+                    setSong(song, 'shazam', !auto);
+                    downloadStatus.textContent = auto
+                        ? 'Identified from audio ✦'
+                        : `Identified: ${song.raw}`;
+                    return song;
+                }
+
+                downloadStatus.textContent = 'Could not identify this moment.';
+                scheduleShazam(false);
+                return null;
+            } catch (err) {
+                if (selectedChannel === channelId) {
+                    downloadStatus.textContent = auto
+                        ? 'Identify later if metadata stays empty.'
+                        : 'Identify failed — try again in a bit.';
+                    scheduleShazam(false);
+                }
+                console.log(err);
+                return null;
+            } finally {
+                clearTimeout(kill);
+                identifyBusy = false;
+                identifyBtn.classList.remove('busy');
+                identifyBtn.disabled = false;
+            }
+        }
+
+        function updateSource(channelId) {
+            const channel = getChannel(channelId);
+            if (!channel) return;
+
+            player.src = channel.src;
+            selectedChannel = channelId;
+            localStorage.setItem('lastSelectedChannel', String(channelId));
+            clearShazamTimer();
+            setSong(null, null, true);
+            downloadStatus.textContent = '';
+            changeTitle(channelId);
+            highlightChannel(channelId);
+            startIcyMonitor(channel);
+            startMetaPoll(channel);
+            scheduleShazam(true);
+            player.play().catch(console.log);
         }
 
         function setControls() {
+            if (!navigator.mediaSession) return;
+
             navigator.mediaSession.setActionHandler('previoustrack', () => {
                 if (selectedChannel > 0) {
-                    selectedChannel--
-                    updateSource(selectedChannel);
+                    updateSource(selectedChannel - 1);
                 }
-
             });
+
             navigator.mediaSession.setActionHandler('nexttrack', () => {
                 if (selectedChannel < channels.length - 1) {
-                    selectedChannel++
-                    updateSource(selectedChannel);
+                    updateSource(selectedChannel + 1);
                 }
             });
-
         }
 
-        // Validate that the saved channel ID exists in the channels array
+        function songQuery(song) {
+            return song.artist ? `${song.artist} ${song.title}` : song.title || song.raw;
+        }
+
+        async function searchYouTube(query) {
+            let lastError = null;
+
+            for (const base of PIPED_INSTANCES) {
+                try {
+                    const url = `${base}/search?q=${encodeURIComponent(query)}&filter=videos`;
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error('search failed');
+                    const data = await response.json();
+                    const items = data.items || data;
+                    const video = (items || []).find(item =>
+                        item.type === 'stream' || (item.url && item.url.includes('watch?v='))
+                    );
+                    if (video) {
+                        const id = (video.url || '').replace('/watch?v=', '');
+                        return {
+                            id,
+                            title: video.title || query,
+                            url: `https://www.youtube.com/watch?v=${id}`
+                        };
+                    }
+                } catch (err) {
+                    lastError = err;
+                }
+            }
+
+            throw lastError || new Error('No YouTube match found');
+        }
+
+        function triggerBlobDownload(blob, filename) {
+            const objectUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = objectUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(objectUrl);
+        }
+
+        async function tryPipedAudioDownload(videoId, filename) {
+            for (const base of PIPED_INSTANCES) {
+                try {
+                    const response = await fetch(`${base}/streams/${videoId}`);
+                    if (!response.ok) continue;
+                    const data = await response.json();
+                    const audio = (data.audioStreams || [])
+                        .slice()
+                        .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+                    if (!audio || !audio.url) continue;
+
+                    const audioRes = await fetch(audio.url);
+                    if (!audioRes.ok) continue;
+                    const blob = await audioRes.blob();
+                    if (blob.size < 10000) continue;
+                    triggerBlobDownload(blob, filename);
+                    return true;
+                } catch (err) {
+                    // Try next instance.
+                }
+            }
+            return false;
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function downloadMp3FromYouTube(youtubeUrl, filename, onStatus) {
+            const startUrl = 'https://loader.to/ajax/download.php?format=mp3&url='
+                + encodeURIComponent(youtubeUrl);
+            // loader.to blocks browser CORS on the start call; reader proxy works.
+            if (onStatus) onStatus('Preparing MP3…');
+            const startText = await fetch('https://r.jina.ai/' + startUrl, {
+                headers: {
+                    Accept: 'text/plain',
+                    'X-Timeout': '45'
+                }
+            }).then(r => {
+                if (!r.ok) throw new Error('MP3 start failed');
+                return r.text();
+            });
+
+            const started = extractJsonObject(startText);
+            if (!started || !started.progress_url) {
+                throw new Error('MP3 converter did not start');
+            }
+
+            let downloadUrl = null;
+            for (let i = 0; i < 30; i++) {
+                await sleep(2000);
+                const progress = await fetch(started.progress_url).then(r => r.json());
+                if (progress.download_url) {
+                    downloadUrl = progress.download_url;
+                    break;
+                }
+                if (onStatus && i % 3 === 2) onStatus('Converting to MP3…');
+            }
+
+            if (!downloadUrl) throw new Error('MP3 conversion timed out');
+
+            if (onStatus) onStatus('Saving file…');
+            const fileRes = await fetch(downloadUrl);
+            if (!fileRes.ok) throw new Error('MP3 fetch failed');
+            const blob = await fileRes.blob();
+            if (blob.size < 10000) throw new Error('MP3 file empty');
+            triggerBlobDownload(blob, filename);
+            return true;
+        }
+
+        async function downloadCurrentSong() {
+            if (!canDownloadSong(currentSong) || downloadBusy) return;
+
+            downloadBusy = true;
+            downloadBtn.disabled = true;
+            downloadBtn.classList.add('busy');
+            downloadStatus.textContent = 'Searching YouTube…';
+
+            try {
+                const query = songQuery(currentSong);
+                const video = await searchYouTube(query);
+                downloadStatus.textContent = `Found: ${video.title}`;
+
+                const safeName = (currentSong.raw || query)
+                    .replace(/[<>:"/\\|?*]+/g, '')
+                    .trim()
+                    .slice(0, 80) || 'song';
+                const filename = safeName + '.mp3';
+
+                downloadStatus.textContent = 'Downloading MP3…';
+                const direct = await tryPipedAudioDownload(video.id, filename);
+
+                if (direct) {
+                    downloadStatus.textContent = 'Download started.';
+                } else {
+                    await downloadMp3FromYouTube(
+                        video.url,
+                        filename,
+                        text => { downloadStatus.textContent = text; }
+                    );
+                    downloadStatus.textContent = 'Download started.';
+                }
+            } catch (err) {
+                downloadStatus.textContent = 'Download failed — try again.';
+                console.log(err);
+            } finally {
+                downloadBusy = false;
+                downloadBtn.classList.remove('busy');
+                downloadBtn.disabled = !canDownloadSong(currentSong);
+            }
+        }
+
+        downloadBtn.addEventListener('click', downloadCurrentSong);
+        identifyBtn.addEventListener('click', () => identifyCurrentSong(false));
+
+        youtubeBtn.addEventListener('click', async () => {
+            if (!canDownloadSong(currentSong)) return;
+            youtubeBtn.disabled = true;
+            downloadStatus.textContent = 'Opening YouTube…';
+            try {
+                const video = await searchYouTube(songQuery(currentSong));
+                window.open(video.url, '_blank', 'noopener,noreferrer');
+                downloadStatus.textContent = video.title;
+            } catch (err) {
+                const q = encodeURIComponent(songQuery(currentSong));
+                window.open('https://www.youtube.com/results?search_query=' + q, '_blank', 'noopener,noreferrer');
+                downloadStatus.textContent = 'Opened YouTube search.';
+            } finally {
+                youtubeBtn.disabled = !canDownloadSong(currentSong);
+            }
+        });
+
         if (selectedChannel < 0 || selectedChannel >= channels.length) {
             selectedChannel = 0;
         }
-        
+
         updateSource(selectedChannel);
         setControls();
         player.volume = 0.4;
         player.play()
-            .then(_ => setControls())
+            .then(() => setControls())
             .catch(console.log);
-
     </script>
 </body>
 
