@@ -1035,6 +1035,10 @@
             return normalizeMatchText(songQuery(song));
         }
 
+        function hasHebrew(value) {
+            return /[\u0590-\u05FF]/.test(String(value || ''));
+        }
+
         function normalizeMatchText(value) {
             return String(value || '')
                 .toLowerCase()
@@ -1043,6 +1047,23 @@
                 .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
                 .replace(/\s+/g, ' ')
                 .trim();
+        }
+
+        // Rough Hebrew→Latin so "לאט לאט" can match metadata like "Leat Leat".
+        function transliterateHebrewApprox(value) {
+            const map = {
+                א: 'a', ב: 'b', ג: 'g', ד: 'd', ה: 'h', ו: 'o', ז: 'z', ח: 'h', ט: 't',
+                י: 'i', כ: 'k', ך: 'k', ל: 'l', מ: 'm', ם: 'm', נ: 'n', ן: 'n', ס: 's',
+                ע: 'a', פ: 'p', ף: 'f', צ: 'tz', ץ: 'tz', ק: 'k', ר: 'r', ש: 'sh', ת: 't',
+                װ: 'v', ױ: 'oi', ײ: 'y'
+            };
+            let out = '';
+            for (const ch of String(value || '').replace(/[\u0591-\u05C7]/g, '')) {
+                if (map[ch]) out += map[ch];
+                else if (/[\u0590-\u05FF]/.test(ch)) continue;
+                else out += ch;
+            }
+            return normalizeMatchText(out);
         }
 
         function matchTokens(value) {
@@ -1055,10 +1076,80 @@
                 .filter(token => token.length > 1 && !stop.has(token));
         }
 
-        function tokenCoverage(needles, haystack) {
+        function editDistance(a, b) {
+            if (a === b) return 0;
+            if (!a.length) return b.length;
+            if (!b.length) return a.length;
+            const prev = new Array(b.length + 1);
+            const cur = new Array(b.length + 1);
+            for (let j = 0; j <= b.length; j++) prev[j] = j;
+            for (let i = 1; i <= a.length; i++) {
+                cur[0] = i;
+                for (let j = 1; j <= b.length; j++) {
+                    const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                    cur[j] = Math.min(cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+                }
+                for (let j = 0; j <= b.length; j++) prev[j] = cur[j];
+            }
+            return prev[b.length];
+        }
+
+        // Hebrew spelling omits vowels: רכבת→rkbt vs radio tag "rakevet".
+        function consonantSkeleton(value) {
+            return normalizeMatchText(value)
+                .replace(/[aeiouy]/g, '')
+                .replace(/v/g, 'b'); // ב is often b or v in romanization
+        }
+
+        function softTokenHit(needle, haystack) {
+            if (!needle) return false;
+            if (haystack.includes(needle)) return true;
+            const needleSkel = consonantSkeleton(needle);
+            return haystack.split(' ').some(word => {
+                if (!word) return false;
+                if (word === needle) return true;
+                // Containment only when clearly a stem (avoid leat≈lelo).
+                if (word.length >= 4 && needle.length >= 4) {
+                    if (word.startsWith(needle) || needle.startsWith(word)) return true;
+                }
+                const wordSkel = consonantSkeleton(word);
+                // lev↔lb (לב), rakevet↔rkbt (רכבת)
+                if (needleSkel.length >= 2 && needleSkel === wordSkel) return true;
+                if (
+                    needleSkel.length >= 3 &&
+                    wordSkel.length >= 3 &&
+                    needleSkel[0] === wordSkel[0] &&
+                    editDistance(needleSkel, wordSkel) <= 1
+                ) {
+                    return true;
+                }
+                const minLen = Math.min(needle.length, word.length);
+                if (minLen < 3) return false;
+                if (needle[0] !== word[0]) return false;
+                if (Math.abs(needle.length - word.length) > 2) return false;
+                const dist = editDistance(needle, word);
+                // Short romanized Hebrew tokens: allow 1 edit (leat≈lat).
+                if (minLen <= 4) return dist <= 1;
+                return dist <= 2;
+            });
+        }
+
+        function softTokenCoverage(needles, haystack) {
             if (!needles.length) return 1;
-            const hit = needles.filter(token => haystack.includes(token)).length;
+            const hit = needles.filter(token => softTokenHit(token, haystack)).length;
             return hit / needles.length;
+        }
+
+        function videoMatchHaystack(video) {
+            const rawTitle = String(video.title || '');
+            const rawUploader = String(video.uploaderName || video.uploader || '');
+            const latin = normalizeMatchText(`${rawTitle} ${rawUploader}`);
+            const fromHebrew = transliterateHebrewApprox(`${rawTitle} ${rawUploader}`);
+            return {
+                haystack: `${latin} ${fromHebrew}`.trim(),
+                uploaderHaystack: `${normalizeMatchText(rawUploader)} ${transliterateHebrewApprox(rawUploader)}`.trim(),
+                hasHebrew: hasHebrew(rawTitle) || hasHebrew(rawUploader)
+            };
         }
 
         function toYouTubeResult(video, fallbackTitle) {
@@ -1075,31 +1166,33 @@
             };
         }
 
-        function scoreYouTubeCandidate(video, song) {
-            const title = normalizeMatchText(video.title);
-            const uploader = normalizeMatchText(video.uploaderName || video.uploader);
-            const haystack = `${title} ${uploader}`;
+        function scoreYouTubeCandidate(video, song, resultIndex) {
+            const { haystack, uploaderHaystack, hasHebrew: videoHebrew } = videoMatchHaystack(video);
             const artistTokens = matchTokens(song.artist || '');
             const titleTokens = matchTokens(song.title || song.raw || '');
-            const titleCov = tokenCoverage(titleTokens, haystack);
-            const artistCov = tokenCoverage(artistTokens, haystack);
+            const songHebrew = hasHebrew(song.artist) || hasHebrew(song.title) || hasHebrew(song.raw);
+            const titleCov = softTokenCoverage(titleTokens, haystack);
+            const artistCov = softTokenCoverage(artistTokens, haystack);
             const artistInUploader = artistTokens.length
-                ? tokenCoverage(artistTokens, uploader)
+                ? softTokenCoverage(artistTokens, uploaderHaystack)
                 : 0;
 
             let score = titleCov * 45 + artistCov * 30;
             if (artistInUploader >= 0.8) score += 18;
-            if (/official audio|\btopic\b/.test(title) || / topic$/.test(uploader)) score += 22;
-            if (/official (music )?video|\bvevo\b/.test(`${title} ${uploader}`)) score += 14;
-            if (/\baudio\b/.test(title) && !/\blive\b/.test(title)) score += 8;
+            // Latin radio metadata + Hebrew YouTube title (common for Israeli songs).
+            if (!songHebrew && videoHebrew && artistInUploader >= 0.6) score += 20;
+            if (!songHebrew && videoHebrew && titleCov >= 0.5) score += 12;
+            if (/official audio|\btopic\b/.test(haystack) || / topic$/.test(uploaderHaystack)) score += 22;
+            if (/official (music )?video|\bvevo\b/.test(haystack)) score += 14;
+            if (/\baudio\b/.test(haystack) && !/\blive\b/.test(haystack)) score += 8;
 
-            if (/\blive\b|concert|session|unplugged|tour|festival|performance|from the/.test(title)) {
+            if (/\blive\b|concert|session|unplugged|tour|festival|performance|from the/.test(haystack)) {
                 score -= 40;
             }
-            if (/\bcover\b|karaoke|remix|slowed|nightcore|sped up|8d audio|mashup|tribute|reaction|instrumental/.test(title)) {
+            if (/\bcover\b|karaoke|remix|slowed|nightcore|sped up|8d audio|mashup|tribute|reaction|instrumental/.test(haystack)) {
                 score -= 35;
             }
-            if (/lyrics?/.test(title)) score -= 6;
+            if (/lyrics?/.test(haystack)) score -= 6;
 
             const duration = Number(video.duration || 0) || 0;
             if (duration > 0 && duration < 90) score -= 18;
@@ -1108,8 +1201,17 @@
 
             const views = Number(video.views || 0) || 0;
             if (views > 0) score += Math.min(10, Math.log10(views + 1));
+            if (Number.isFinite(resultIndex)) score += Math.max(0, 12 - resultIndex);
 
-            return { video, score, titleCov, artistCov };
+            return {
+                video,
+                score,
+                titleCov,
+                artistCov,
+                artistInUploader,
+                videoHebrew,
+                songHebrew
+            };
         }
 
         function pickYouTubeResult(items, song) {
@@ -1119,16 +1221,25 @@
             if (!videos.length) return null;
 
             const scored = videos
-                .map(video => scoreYouTubeCandidate(video, song))
+                .map((video, index) => scoreYouTubeCandidate(video, song, index))
                 .filter(entry => {
+                    const artistKnown = matchTokens(song.artist || '').length > 0;
+                    const crossScript =
+                        !entry.songHebrew &&
+                        entry.videoHebrew &&
+                        entry.artistInUploader >= 0.6;
+
+                    if (crossScript) {
+                        // Artist channel + Hebrew title: title tokens may only match via transliteration.
+                        return entry.titleCov >= 0.34 || entry.artistInUploader >= 0.8;
+                    }
                     if (entry.titleCov < 0.55) return false;
-                    // If we know the artist, require at least a partial artist match.
-                    if (matchTokens(song.artist || '').length && entry.artistCov < 0.34) return false;
+                    if (artistKnown && entry.artistCov < 0.34) return false;
                     return true;
                 })
                 .sort((a, b) => b.score - a.score);
 
-            if (!scored.length || scored[0].score < 40) return null;
+            if (!scored.length || scored[0].score < 36) return null;
             return toYouTubeResult(scored[0].video, songQuery(song));
         }
 
@@ -1137,11 +1248,16 @@
             const key = songCacheKey(song);
             if (ytCache.key === key && ytCache.video) return ytCache.video;
 
+            const dashed = song.artist && song.title
+                ? `${song.artist} - ${song.title}`
+                : query;
+
             let lastError = null;
             const searches = [
+                { q: query, filter: 'videos' },
+                { q: dashed, filter: 'videos' },
                 { q: query, filter: 'music_songs' },
-                { q: `${query} official audio`, filter: 'videos' },
-                { q: query, filter: 'videos' }
+                { q: `${query} official audio`, filter: 'videos' }
             ];
 
             for (const base of PIPED_INSTANCES) {
