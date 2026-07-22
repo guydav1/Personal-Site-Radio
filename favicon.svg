@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Radio">
+  <defs>
+    <linearGradient id="face" x1="12" y1="8" x2="52" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2a2a2a"/>
+      <stop offset="1" stop-color="#111111"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="32" y1="18" x2="32" y2="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#d7d7d7"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="64" height="64" rx="14" fill="url(#face)"/>
+
+  <!-- broadcast arcs -->
+  <path d="M20 28c6.5-6.5 17.5-6.5 24 0" fill="none" stroke="url(#glow)" stroke-width="3.2" stroke-linecap="round" opacity="0.95"/>
+  <path d="M15 23c11-11 23-11 34 0" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" opacity="0.45"/>
+  <path d="M11 18c14.5-14.5 27.5-14.5 42 0" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.22"/>
+
+  <!-- center signal -->
+  <circle cx="32" cy="36" r="5.5" fill="url(#glow)"/>
+  <circle cx="32" cy="36" r="2.2" fill="#111111"/>
+
+  <!-- subtle base bar like a tuner -->
+  <rect x="18" y="48" width="28" height="3.5" rx="1.75" fill="#ffffff" opacity="0.2"/>
+  <rect x="26" y="48" width="8" height="3.5" rx="1.75" fill="#ffffff" opacity="0.85"/>
+</svg>
