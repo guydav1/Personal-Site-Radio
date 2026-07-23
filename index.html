@@ -265,8 +265,8 @@
                 id: 3,
                 name: '106FM',
                 src: 'https://live.ecast.co.il/stream/galimlive',
-                // Stream supports ICY, but titles are often blank; keep as fallback.
-                icy: true,
+                // ecast allows audio playback CORS, but rejects Icy-MetaData in preflight.
+                icy: false,
                 meta: {
                     type: 'ecastPlayerInfo',
                     url: 'https://live.ecast.co.il/AudioPlayer/galimlive/playerInfo'
