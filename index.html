@@ -1175,14 +1175,15 @@
                 .trim();
         }
 
+        const HEBREW_LATIN_BASE = {
+            א: 'a', ב: 'b', ג: 'g', ד: 'd', ה: 'h', ו: 'o', ז: 'z', ח: 'h', ט: 't',
+            י: 'i', כ: 'k', ך: 'k', ל: 'l', מ: 'm', ם: 'm', נ: 'n', ן: 'n', ס: 's',
+            ע: 'a', פ: 'p', ף: 'f', צ: 'tz', ץ: 'tz', ק: 'k', ר: 'r', ש: 'sh', ת: 't',
+            װ: 'v', ױ: 'oi', ײ: 'y'
+        };
+
         // Rough Hebrew→Latin so "לאט לאט" can match metadata like "Leat Leat".
-        function transliterateHebrewApprox(value) {
-            const map = {
-                א: 'a', ב: 'b', ג: 'g', ד: 'd', ה: 'h', ו: 'o', ז: 'z', ח: 'h', ט: 't',
-                י: 'i', כ: 'k', ך: 'k', ל: 'l', מ: 'm', ם: 'm', נ: 'n', ן: 'n', ס: 's',
-                ע: 'a', פ: 'p', ף: 'f', צ: 'tz', ץ: 'tz', ק: 'k', ר: 'r', ש: 'sh', ת: 't',
-                װ: 'v', ױ: 'oi', ײ: 'y'
-            };
+        function transliterateHebrewWithMap(value, map) {
             let out = '';
             for (const ch of String(value || '').replace(/[\u0591-\u05C7]/g, '')) {
                 if (map[ch]) out += map[ch];
@@ -1192,10 +1193,49 @@
             return normalizeMatchText(out);
         }
 
+        function transliterateHebrewApprox(value) {
+            return transliterateHebrewWithMap(value, HEBREW_LATIN_BASE);
+        }
+
+        // Radio tags use many romanizations (hofshi/chofshi, ze/zh, pe/fe…).
+        function transliterateHebrewVariants(value) {
+            const maps = [
+                HEBREW_LATIN_BASE,
+                { ...HEBREW_LATIN_BASE, ה: 'e', פ: 'f', ח: 'ch' },
+                { ...HEBREW_LATIN_BASE, ה: 'a', פ: 'f', ח: 'kh', ו: 'u', ב: 'v' }
+            ];
+            const parts = maps
+                .map(map => transliterateHebrewWithMap(value, map))
+                .filter(Boolean);
+            return [...new Set(parts.join(' ').split(' '))].join(' ');
+        }
+
+        // Latin radio tags ↔ alternate Israeli romanization spellings.
+        function romanizationVariants(token) {
+            const t = normalizeMatchText(token);
+            if (!t) return [];
+            const out = new Set([t]);
+            if (t.startsWith('ch') && t.length > 3) out.add('h' + t.slice(2));
+            if (t.startsWith('kh') && t.length > 3) out.add('h' + t.slice(2));
+            if (t.startsWith('h') && t.length > 2) {
+                out.add('ch' + t.slice(1));
+                out.add('kh' + t.slice(1));
+            }
+            if (t.includes('p')) out.add(t.replace(/p/g, 'f'));
+            if (t.includes('f')) out.add(t.replace(/f/g, 'p'));
+            if (t.includes('tz')) out.add(t.replace(/tz/g, 'ts'));
+            if (t.includes('ts')) out.add(t.replace(/ts/g, 'tz'));
+            if (t.endsWith('ey') && t.length > 3) out.add(t.slice(0, -2) + 'e');
+            if (t.endsWith('e') && t.length > 3) out.add(t + 'y');
+            return [...out];
+        }
+
         function matchTokens(value) {
             const stop = new Set([
                 'the', 'a', 'an', 'and', 'or', 'feat', 'ft', 'with', 'official',
-                'audio', 'video', 'lyrics', 'lyric', 'hd', 'hq', 'mv'
+                'audio', 'video', 'lyrics', 'lyric', 'hd', 'hq', 'mv',
+                // Common Hebrew particles in Latin radio tags — weak match signal.
+                'ze', 'et', 'al', 'ha', 'shel', 'le', 'la', 'el'
             ]);
             return normalizeMatchText(value)
                 .split(' ')
@@ -1227,7 +1267,7 @@
                 .replace(/v/g, 'b'); // ב is often b or v in romanization
         }
 
-        function softTokenHit(needle, haystack) {
+        function softTokenHitCore(needle, haystack) {
             if (!needle) return false;
             if (haystack.includes(needle)) return true;
             const needleSkel = consonantSkeleton(needle);
@@ -1249,15 +1289,45 @@
                 ) {
                     return true;
                 }
+                // hofshi↔chofshi (leading ch/kh vs h)
+                const stripGuttural = value => value.replace(/^(ch|kh)/, 'h');
+                const n2 = stripGuttural(needle);
+                const w2 = stripGuttural(word);
+                if (n2 !== needle || w2 !== word) {
+                    const n2s = consonantSkeleton(n2);
+                    const w2s = consonantSkeleton(w2);
+                    if (n2s.length >= 3 && n2s === w2s) return true;
+                    if (
+                        n2s.length >= 3 &&
+                        w2s.length >= 3 &&
+                        n2s[0] === w2s[0] &&
+                        editDistance(n2s, w2s) <= 1
+                    ) {
+                        return true;
+                    }
+                }
                 const minLen = Math.min(needle.length, word.length);
                 if (minLen < 3) return false;
-                if (needle[0] !== word[0]) return false;
+                if (needle[0] !== word[0] && stripGuttural(needle)[0] !== stripGuttural(word)[0]) {
+                    return false;
+                }
                 if (Math.abs(needle.length - word.length) > 2) return false;
                 const dist = editDistance(needle, word);
                 // Short romanized Hebrew tokens: allow 1 edit (leat≈lat).
                 if (minLen <= 4) return dist <= 1;
                 return dist <= 2;
             });
+        }
+
+        function softTokenHit(needle, haystack) {
+            if (!needle) return false;
+            // Try common romanization spellings both ways.
+            for (const n of romanizationVariants(needle)) {
+                if (softTokenHitCore(n, haystack)) return true;
+            }
+            return haystack.split(' ').some(word =>
+                romanizationVariants(word).some(w => softTokenHitCore(needle, w))
+            );
         }
 
         function softTokenCoverage(needles, haystack) {
@@ -1270,12 +1340,12 @@
             const rawTitle = String(video.title || '');
             const rawUploader = String(video.uploaderName || video.uploader || '');
             const latin = normalizeMatchText(`${rawTitle} ${rawUploader}`);
-            const fromHebrew = transliterateHebrewApprox(`${rawTitle} ${rawUploader}`);
-            const titleHaystack = `${normalizeMatchText(rawTitle)} ${transliterateHebrewApprox(rawTitle)}`.trim();
+            const fromHebrew = transliterateHebrewVariants(`${rawTitle} ${rawUploader}`);
+            const titleHaystack = `${normalizeMatchText(rawTitle)} ${transliterateHebrewVariants(rawTitle)}`.trim();
             return {
                 haystack: `${latin} ${fromHebrew}`.trim(),
                 titleHaystack,
-                uploaderHaystack: `${normalizeMatchText(rawUploader)} ${transliterateHebrewApprox(rawUploader)}`.trim(),
+                uploaderHaystack: `${normalizeMatchText(rawUploader)} ${transliterateHebrewVariants(rawUploader)}`.trim(),
                 hasHebrew: hasHebrew(rawTitle) || hasHebrew(rawUploader),
                 rawTitle
             };
@@ -1297,13 +1367,18 @@
 
         function titleNoiseCount(rawTitle, artistTokens, titleTokens) {
             const known = [...artistTokens, ...titleTokens];
+            const ignore = new Set([
+                'ze', 'zh', 'et', 'al', 'ha', 'shel', 'le', 'la', 'el',
+                'the', 'a', 'an', 'and', 'of', 'official', 'audio', 'video', 'lyrics'
+            ]);
             // Count only Latin/transliterated tokens — raw Hebrew letters aren't "noise".
             const words = [
                 ...transliterateHebrewApprox(rawTitle).split(' '),
                 ...normalizeMatchText(rawTitle).split(' ').filter(word => /^[a-z0-9]+$/i.test(word))
             ].filter(Boolean);
             let noise = 0;
-            for (const word of words) {
+            for (const word of [...new Set(words)]) {
+                if (word.length <= 2 || ignore.has(word)) continue;
                 const hit = known.some(token => softTokenHit(token, word) || softTokenHit(word, token));
                 if (!hit) noise += 1;
             }
@@ -1315,11 +1390,53 @@
             if (!text) return '';
             const dashed = text.split(/\s[-–—|]\s/)[0];
             if (dashed && dashed.length < text.length) {
-                return `${normalizeMatchText(dashed)} ${transliterateHebrewApprox(dashed)}`.trim();
+                return `${normalizeMatchText(dashed)} ${transliterateHebrewVariants(dashed)}`.trim();
             }
             // No separator (e.g. "ORLIKA Mon petit bout ...") — only the opening words.
             const lead = text.split(/\s+/).slice(0, 2).join(' ');
-            return `${normalizeMatchText(lead)} ${transliterateHebrewApprox(lead)}`.trim();
+            return `${normalizeMatchText(lead)} ${transliterateHebrewVariants(lead)}`.trim();
+        }
+
+        function buildYouTubeSearches(song) {
+            const query = songQuery(song);
+            const artist = (song.artist || '').trim();
+            const title = (song.title || '').trim();
+            const searches = [];
+            const seen = new Set();
+
+            const add = (q, filter) => {
+                const cleaned = String(q || '').replace(/\s+/g, ' ').trim();
+                if (!cleaned) return;
+                const key = `${filter}\0${normalizeMatchText(cleaned)}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                searches.push({ q: cleaned, filter });
+            };
+
+            add(query, 'videos');
+            if (artist && title) add(`${artist} - ${title}`, 'videos');
+            add(query, 'music_songs');
+            add(`${query} official audio`, 'videos');
+
+            // Latin radio tags often miss on Piped; shorter / alt-romanization queries hit Hebrew titles.
+            if (artist && title && !hasHebrew(query)) {
+                const titleWords = matchTokens(title);
+                if (titleWords.length) {
+                    add(`${artist} ${titleWords.slice(0, 2).join(' ')}`, 'videos');
+                    add(`${artist} ${titleWords[0]}`, 'videos');
+                    for (const variant of romanizationVariants(titleWords[0]).slice(0, 4)) {
+                        add(`${artist} ${variant}`, 'videos');
+                        if (titleWords.length > 1) {
+                            add(
+                                `${artist} ${variant} ${titleWords.slice(1).join(' ')}`,
+                                'videos'
+                            );
+                        }
+                    }
+                }
+            }
+
+            return searches;
         }
 
         function scoreYouTubeCandidate(video, song, resultIndex) {
@@ -1440,21 +1557,11 @@
         }
 
         async function searchYouTube(song) {
-            const query = songQuery(song);
             const key = songCacheKey(song);
             if (ytCache.key === key && ytCache.video) return ytCache.video;
 
-            const dashed = song.artist && song.title
-                ? `${song.artist} - ${song.title}`
-                : query;
-
             let lastError = null;
-            const searches = [
-                { q: query, filter: 'videos' },
-                { q: dashed, filter: 'videos' },
-                { q: query, filter: 'music_songs' },
-                { q: `${query} official audio`, filter: 'videos' }
-            ];
+            const searches = buildYouTubeSearches(song);
 
             for (const base of PIPED_INSTANCES) {
                 const settled = await Promise.allSettled(searches.map(async search => {
