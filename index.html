@@ -239,9 +239,9 @@
                 id: 0,
                 name: 'Glgltz',
                 src: 'https://glzwizzlv.bynetcdn.com/glglz_mp3',
-                // Official glz.co.il now-playing; ICY kept as low-priority fallback only.
+                // Official glz.co.il LiveSchedule; ICY kept as low-priority fallback only.
                 icy: true,
-                meta: { type: 'glzNowPlaying' }
+                meta: { type: 'glzNowPlaying', rootId: 1920 }
             },
             {
                 id: 1,
@@ -734,18 +734,50 @@
             return parseEcastSongText(await response.text(), type);
         }
 
-        async function fetchGlzNowPlaying() {
-            // Same feed the glz.co.il player uses (CORS-enabled).
-            const response = await fetch(
-                'https://glz.co.il/umbraco/api/playerv2/GlglzNowPlaying',
-                { headers: { Accept: 'application/json' } }
-            );
-            if (!response.ok) throw new Error('GLZ now-playing failed');
-            const data = await response.json();
-            const title = (data.title || data.Title || '').trim();
-            const artist = (data.artist || data.Artist || '').trim();
+        function songFromGlzLiveSchedule(data) {
+            if (!data) return null;
+            const seg = (Array.isArray(data.segments) && data.segments[0]) || data;
+            if (!seg || typeof seg !== 'object') return null;
+            // Live player: title = song, desc = artist (e.g. Maps / Yeah Yeah Yeahs).
+            const title = (seg.title || seg.Title || '').trim();
+            const artist = (seg.desc || seg.Desc || seg.artist || seg.Artist || '').trim();
             if (!title) return null;
             return parseStreamTitle(artist ? `${artist} - ${title}` : title);
+        }
+
+        async function fetchGlzNowPlaying(rootId) {
+            // GlglzNowPlaying was removed (404). Site player now uses LiveSchedule.
+            const id = rootId || 1920;
+            const url = `https://glz.co.il/umbraco/api/playerv2/LiveSchedule?rootId=${encodeURIComponent(id)}`;
+
+            try {
+                const response = await fetch(url, {
+                    headers: { Accept: 'application/json' }
+                });
+                if (response.ok) {
+                    const type = (response.headers.get('content-type') || '').toLowerCase();
+                    if (type.includes('json')) {
+                        const song = songFromGlzLiveSchedule(await response.json());
+                        if (song) return song;
+                    }
+                }
+            } catch (err) {
+                // Imperva often challenges cross-origin callers; fall through to proxy.
+            }
+
+            const proxy = await fetch('https://r.jina.ai/' + url, {
+                headers: {
+                    Accept: 'text/plain',
+                    'X-Engine': 'curl',
+                    'X-Respond-With': 'text',
+                    'X-Timeout': '20'
+                }
+            });
+            if (!proxy.ok) throw new Error('GLZ now-playing failed');
+            const data = extractJsonObject(await proxy.text());
+            const song = songFromGlzLiveSchedule(data);
+            if (!song) throw new Error('GLZ now-playing empty');
+            return song;
         }
 
         async function fetchOfficialSong(channel) {
@@ -759,7 +791,7 @@
                 case 'ecastPlayerInfo':
                     return fetchEcastSong(channel.meta);
                 case 'glzNowPlaying':
-                    return fetchGlzNowPlaying();
+                    return fetchGlzNowPlaying(channel.meta.rootId);
                 default:
                     return null;
             }
