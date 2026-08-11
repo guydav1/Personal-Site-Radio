@@ -26,6 +26,33 @@
             box-shadow: 1px 1px 5px rgb(139, 139, 139);
         }
 
+        .site-nav {
+            display: flex;
+            justify-content: center;
+            gap: 0.35em;
+            padding-top: 0.75em;
+        }
+
+        .site-nav a {
+            text-decoration: none;
+            color: #555;
+            font-size: 0.85em;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            padding: 0.4em 0.85em;
+            border-radius: 5px;
+        }
+
+        .site-nav a:hover {
+            background: rgba(0, 0, 0, 0.06);
+            color: #222;
+        }
+
+        .site-nav a.active {
+            background: rgba(0, 0, 0, 0.45);
+            color: #fff;
+        }
+
         .header {
             padding: 3%;
             text-align: center;
@@ -182,6 +209,11 @@
 <body>
 
     <div class="player">
+        <nav class="site-nav" aria-label="Site">
+            <a href="index.html" class="active" aria-current="page">Live</a>
+            <a href="history.html">History</a>
+        </nav>
+
         <div class="header">
             <h1 id="title">Playing: ...</h1>
         </div>

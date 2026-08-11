@@ -1,0 +1,37 @@
+{
+  "updatedAt": "2026-08-11T20:42:57.731Z",
+  "stations": {
+    "0": {
+      "name": "Glgltz",
+      "entries": [
+        {
+          "artist": "החברים של נטאשה",
+          "title": "אני לא רוקד כשעצוב",
+          "raw": "החברים של נטאשה - אני לא רוקד כשעצוב",
+          "playedAt": "2026-08-11T20:40:17Z",
+          "source": "liveSchedule"
+        }
+      ]
+    },
+    "1": {
+      "name": "Eco",
+      "entries": []
+    },
+    "2": {
+      "name": "88FM",
+      "entries": [
+        {
+          "artist": "Fela Kuti",
+          "title": "Expensive Shit",
+          "raw": "Fela Kuti - Expensive Shit",
+          "playedAt": "2026-08-11T20:42:57.442Z",
+          "source": "kanAcr"
+        }
+      ]
+    },
+    "3": {
+      "name": "106FM",
+      "entries": []
+    }
+  }
+}

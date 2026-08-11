@@ -1,0 +1,320 @@
+/**
+ * Dedicated station now-playing monitor (independent of the live radio player).
+ * Polls official NP feeds, merges into data/history.json, and exits.
+ * Intended to run on a 1-minute GitHub Actions schedule.
+ */
+
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const HISTORY_PATH = join(ROOT, 'data', 'history.json');
+const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_ENTRIES_PER_STATION = 500;
+
+const STATIONS = [
+    { id: '0', name: 'Glgltz', type: 'glzLiveSchedule', rootId: 1920 },
+    { id: '1', name: 'Eco', type: 'ecoFirestore' },
+    { id: '2', name: '88FM', type: 'kanAcr', channelId: 4 },
+    { id: '3', name: '106FM', type: 'ecastPlayerInfo', url: 'https://live.ecast.co.il/AudioPlayer/galimlive/playerInfo' }
+];
+
+function normalizeKey(value) {
+    return String(value || '')
+        .toLowerCase()
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function entryKey(entry) {
+    return `${normalizeKey(entry.artist)}\0${normalizeKey(entry.title)}\0${entry.playedAt || ''}`;
+}
+
+function songKey(entry) {
+    return `${normalizeKey(entry.artist)}\0${normalizeKey(entry.title)}`;
+}
+
+function parseStreamTitle(raw) {
+    const title = String(raw || '').trim();
+    if (!title) return null;
+    const parts = title.split(/\s[-–—]\s/);
+    if (parts.length >= 2) {
+        return {
+            artist: parts[0].trim(),
+            title: parts.slice(1).join(' - ').trim(),
+            raw: title
+        };
+    }
+    return { artist: '', title, raw: title };
+}
+
+function extractJsonObject(text) {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start < 0 || end <= start) return null;
+    try {
+        return JSON.parse(text.slice(start, end + 1));
+    } catch {
+        return null;
+    }
+}
+
+async function fetchJson(url, { headers = {}, timeoutMs = 25000 } = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const response = await fetch(url, {
+            headers: { Accept: 'application/json', ...headers },
+            signal: controller.signal
+        });
+        const type = (response.headers.get('content-type') || '').toLowerCase();
+        const text = await response.text();
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status} for ${url}`);
+        }
+        if (type.includes('json') || /^[{\[]/.test(text.trim())) {
+            try {
+                return JSON.parse(text);
+            } catch {
+                return extractJsonObject(text);
+            }
+        }
+        // Imperva / HTML challenge pages are not usable JSON.
+        if (/incapsula|NOINDEX,\s*NOFOLLOW/i.test(text)) {
+            throw new Error(`Blocked/HTML response for ${url}`);
+        }
+        return extractJsonObject(text);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function fetchViaJina(url, extraHeaders = {}) {
+    const proxyUrl = 'https://r.jina.ai/' + url;
+    const response = await fetch(proxyUrl, {
+        headers: {
+            Accept: 'text/plain',
+            'X-Engine': 'curl',
+            'X-Respond-With': 'text',
+            'X-Timeout': '25',
+            ...extraHeaders
+        }
+    });
+    if (!response.ok) throw new Error(`jina HTTP ${response.status} for ${url}`);
+    return extractJsonObject(await response.text());
+}
+
+async function fetchJsonWithFallback(url, options = {}) {
+    try {
+        const data = await fetchJson(url, options);
+        if (data) return data;
+    } catch (err) {
+        console.warn('direct fetch failed:', err.message || err);
+    }
+    return fetchViaJina(url, options.jinaHeaders || {});
+}
+
+function firestoreString(fields, key) {
+    return fields && fields[key] && fields[key].stringValue
+        ? fields[key].stringValue.trim()
+        : '';
+}
+
+function loadHistory() {
+    if (!existsSync(HISTORY_PATH)) {
+        return {
+            updatedAt: null,
+            stations: Object.fromEntries(
+                STATIONS.map(s => [s.id, { name: s.name, entries: [] }])
+            )
+        };
+    }
+    const data = JSON.parse(readFileSync(HISTORY_PATH, 'utf8'));
+    for (const station of STATIONS) {
+        if (!data.stations[station.id]) {
+            data.stations[station.id] = { name: station.name, entries: [] };
+        }
+        data.stations[station.id].name = station.name;
+        data.stations[station.id].entries = data.stations[station.id].entries || [];
+    }
+    return data;
+}
+
+function pruneStationEntries(entries) {
+    const cutoff = Date.now() - MAX_AGE_MS;
+    return entries
+        .filter(entry => {
+            const t = Date.parse(entry.playedAt || '');
+            return Number.isFinite(t) && t >= cutoff;
+        })
+        .sort((a, b) => Date.parse(b.playedAt) - Date.parse(a.playedAt))
+        .slice(0, MAX_ENTRIES_PER_STATION);
+}
+
+function mergeEntries(existing, incoming) {
+    const byKey = new Map();
+    for (const entry of existing) {
+        byKey.set(entryKey(entry), entry);
+    }
+    let added = 0;
+    for (const entry of incoming) {
+        const key = entryKey(entry);
+        if (!byKey.has(key)) {
+            byKey.set(key, entry);
+            added += 1;
+        }
+    }
+    return {
+        entries: pruneStationEntries([...byKey.values()]),
+        added
+    };
+}
+
+async function collectGlzSegments(rootId) {
+    const url = `https://glz.co.il/umbraco/api/playerv2/LiveSchedule?rootId=${encodeURIComponent(rootId)}`;
+    const data = await fetchJsonWithFallback(url);
+    const segments = Array.isArray(data && data.segments) ? data.segments : [];
+    const now = new Date().toISOString();
+    return segments
+        .map(seg => {
+            const title = String(seg.title || seg.Title || '').trim();
+            const artist = String(seg.desc || seg.Desc || seg.artist || seg.Artist || '').trim();
+            if (!title) return null;
+            const playedAt = seg.startsUtc || seg.StartsUtc || now;
+            return {
+                artist,
+                title,
+                raw: artist ? `${artist} - ${title}` : title,
+                playedAt,
+                source: 'liveSchedule'
+            };
+        })
+        .filter(Boolean);
+}
+
+async function collectEcoCurrent() {
+    const url = 'https://firestore.googleapis.com/v1/projects/eco-99-production/databases/(default)/documents/streamed_content/program';
+    let data;
+    try {
+        data = await fetchJson(url);
+    } catch {
+        data = await fetchViaJina(url);
+    }
+    const fields = data && data.fields;
+    const artist = firestoreString(fields, 'artist_name');
+    const title = firestoreString(fields, 'song_name');
+    if (!title || /^unknown$/i.test(title)) return [];
+    return [{
+        artist,
+        title,
+        raw: artist ? `${artist} - ${title}` : title,
+        playedAt: new Date().toISOString(),
+        source: 'ecoFirestore'
+    }];
+}
+
+async function collectKanCurrent(channelId) {
+    const apiUrl = `https://www.kan.org.il/api/arc-cloud/get-live-track-data?channelId=${channelId}`;
+    let data = null;
+    try {
+        data = await fetchJson(apiUrl, {
+            headers: {
+                Referer: 'https://www.kan.org.il/content/kan/kan-88/'
+            }
+        });
+    } catch {
+        data = await fetchViaJina(apiUrl, { 'X-Respond-Timing': 'network-idle' });
+    }
+    if (!data || !data.title || data.title === 'Unknown') return [];
+    const artist = Array.isArray(data.artists) ? data.artists.join(', ') : '';
+    return [{
+        artist,
+        title: String(data.title).trim(),
+        raw: artist ? `${artist} - ${data.title}` : String(data.title).trim(),
+        playedAt: new Date().toISOString(),
+        source: 'kanAcr'
+    }];
+}
+
+async function collectEcastCurrent(url) {
+    const data = await fetchJson(url);
+    const parsed = parseStreamTitle((data && (data.nowplaying || data.SONGTITLE || data.songtitle)) || '');
+    if (!parsed) return [];
+    return [{
+        artist: parsed.artist,
+        title: parsed.title,
+        raw: parsed.raw,
+        playedAt: new Date().toISOString(),
+        source: 'ecastPlayerInfo'
+    }];
+}
+
+async function collectForStation(station) {
+    switch (station.type) {
+        case 'glzLiveSchedule':
+            return collectGlzSegments(station.rootId);
+        case 'ecoFirestore':
+            return collectEcoCurrent();
+        case 'kanAcr':
+            return collectKanCurrent(station.channelId);
+        case 'ecastPlayerInfo':
+            return collectEcastCurrent(station.url);
+        default:
+            return [];
+    }
+}
+
+function shouldAppendSnapshot(existingEntries, incoming) {
+    // For non-schedule feeds: only keep a new row when the song itself changed
+    // (ignore minute-by-minute re-polls of the same track).
+    if (!incoming.length) return [];
+    const latest = existingEntries[0];
+    return incoming.filter(entry => {
+        if (!latest) return true;
+        return songKey(latest) !== songKey(entry);
+    });
+}
+
+async function main() {
+    const history = loadHistory();
+    let changed = false;
+    const summary = [];
+
+    for (const station of STATIONS) {
+        const bucket = history.stations[station.id];
+        try {
+            let incoming = await collectForStation(station);
+            if (station.type !== 'glzLiveSchedule') {
+                incoming = shouldAppendSnapshot(bucket.entries, incoming);
+            }
+            const { entries, added } = mergeEntries(bucket.entries, incoming);
+            if (added > 0 || entries.length !== bucket.entries.length) {
+                changed = true;
+            }
+            bucket.entries = entries;
+            summary.push(`${station.name}: +${added} (total ${entries.length})`);
+        } catch (err) {
+            summary.push(`${station.name}: error ${err.message || err}`);
+            console.error(station.name, err);
+        }
+    }
+
+    if (changed) {
+        history.updatedAt = new Date().toISOString();
+        mkdirSync(dirname(HISTORY_PATH), { recursive: true });
+        writeFileSync(HISTORY_PATH, JSON.stringify(history, null, 2) + '\n', 'utf8');
+        console.log('history updated');
+    } else {
+        console.log('history unchanged');
+    }
+    console.log(summary.join(' | '));
+}
+
+main().catch(err => {
+    console.error(err);
+    process.exit(1);
+});

@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="favicon.svg">
+    <title>Played songs · Radio</title>
+
+    <style>
+        html {
+            font-family: sans-serif;
+            line-height: 1.35;
+            background-color: rgb(0, 0, 0);
+        }
+
+        body {
+            margin: 0;
+            padding: 1.25em 1em 3em;
+        }
+
+        .shell {
+            margin: 0 auto;
+            width: 520px;
+            max-width: calc(100% - 1em);
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 1px 1px 5px rgb(139, 139, 139);
+            padding: 1.25em 1.4em 1.6em;
+        }
+
+        .site-nav {
+            display: flex;
+            justify-content: center;
+            gap: 0.35em;
+            margin-bottom: 1em;
+        }
+
+        .site-nav a {
+            text-decoration: none;
+            color: #555;
+            font-size: 0.85em;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            padding: 0.4em 0.85em;
+            border-radius: 5px;
+        }
+
+        .site-nav a:hover {
+            background: rgba(0, 0, 0, 0.06);
+            color: #222;
+        }
+
+        .site-nav a.active {
+            background: rgba(0, 0, 0, 0.45);
+            color: #fff;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 1em;
+        }
+
+        .header h1 {
+            margin: 0 0 0.35em;
+            font-size: 1.45em;
+        }
+
+        .header p {
+            margin: 0;
+            color: #666;
+            font-size: 0.92em;
+        }
+
+        #updatedAt {
+            margin-top: 0.55em;
+            font-size: 0.78em;
+            color: #888;
+            min-height: 1.1em;
+        }
+
+        .station-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35em;
+            justify-content: center;
+            margin: 1em 0 1.25em;
+        }
+
+        .station-tabs button {
+            border: none;
+            background: rgba(0, 0, 0, 0.12);
+            color: #222;
+            padding: 0.45em 0.8em;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        .station-tabs button:hover {
+            background: rgba(0, 0, 0, 0.18);
+        }
+
+        .station-tabs button.active {
+            background: rgba(0, 0, 0, 0.45);
+            color: #fff;
+        }
+
+        .station-panel {
+            display: none;
+        }
+
+        .station-panel.active {
+            display: block;
+        }
+
+        .station-panel h2 {
+            margin: 0 0 0.75em;
+            font-size: 1.1em;
+            text-align: center;
+        }
+
+        .day-group {
+            margin-bottom: 1.25em;
+        }
+
+        .day-label {
+            font-size: 0.75em;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #666;
+            margin: 0 0 0.45em;
+            padding-bottom: 0.25em;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        .play-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .play-list li {
+            display: grid;
+            grid-template-columns: 4.2em 1fr;
+            gap: 0.65em;
+            padding: 0.45em 0.15em;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            align-items: baseline;
+        }
+
+        .play-list li:last-child {
+            border-bottom: none;
+        }
+
+        .play-time {
+            font-size: 0.82em;
+            color: #777;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .play-song {
+            font-size: 0.95em;
+            word-break: break-word;
+        }
+
+        .play-song .artist {
+            color: #444;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #888;
+            font-style: italic;
+            padding: 1.5em 0.5em;
+            background: rgba(0, 0, 0, 0.04);
+            border-radius: 5px;
+        }
+
+        .footer-note {
+            margin-top: 1.4em;
+            text-align: center;
+            font-size: 0.75em;
+            color: #999;
+            line-height: 1.4;
+        }
+
+        .footer-note a {
+            color: #666;
+        }
+
+        #loadError {
+            display: none;
+            text-align: center;
+            color: #a33;
+            background: rgba(160, 40, 40, 0.08);
+            border-radius: 5px;
+            padding: 0.75em;
+            margin-bottom: 1em;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="shell">
+        <nav class="site-nav" aria-label="Site">
+            <a href="index.html">Live</a>
+            <a href="history.html" class="active" aria-current="page">History</a>
+        </nav>
+
+        <header class="header">
+            <h1>Played songs</h1>
+            <p>Recent tracks logged from each station’s now-playing feed.</p>
+            <div id="updatedAt">Loading history…</div>
+        </header>
+
+        <div id="loadError"></div>
+        <div class="station-tabs" id="stationTabs" role="tablist" aria-label="Stations"></div>
+        <div id="stationPanels"></div>
+
+        <p class="footer-note">
+            Updated about once a minute by a background monitor.
+            Short tracks can still be missed on some stations.
+            <a href="index.html">Back to live radio</a>
+        </p>
+    </div>
+
+    <script>
+        const TIME_ZONE = 'Asia/Jerusalem';
+        const tabsEl = document.getElementById('stationTabs');
+        const panelsEl = document.getElementById('stationPanels');
+        const updatedAtEl = document.getElementById('updatedAt');
+        const loadErrorEl = document.getElementById('loadError');
+
+        const stationOrder = ['0', '1', '2', '3'];
+        let activeStation = localStorage.getItem('historyStation') || '0';
+
+        function formatUpdatedAt(iso) {
+            if (!iso) return 'No history logged yet — the monitor will fill this in.';
+            try {
+                const formatted = new Intl.DateTimeFormat('en-GB', {
+                    timeZone: TIME_ZONE,
+                    dateStyle: 'medium',
+                    timeStyle: 'short'
+                }).format(new Date(iso));
+                return `Last updated ${formatted} (Israel time)`;
+            } catch (err) {
+                return `Last updated ${iso}`;
+            }
+        }
+
+        function dayKey(iso) {
+            try {
+                return new Intl.DateTimeFormat('en-CA', {
+                    timeZone: TIME_ZONE,
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                }).format(new Date(iso));
+            } catch (err) {
+                return String(iso || '').slice(0, 10);
+            }
+        }
+
+        function formatDayLabel(iso) {
+            try {
+                return new Intl.DateTimeFormat('en-GB', {
+                    timeZone: TIME_ZONE,
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric'
+                }).format(new Date(iso));
+            } catch (err) {
+                return dayKey(iso);
+            }
+        }
+
+        function formatTime(iso) {
+            try {
+                return new Intl.DateTimeFormat('en-GB', {
+                    timeZone: TIME_ZONE,
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                }).format(new Date(iso));
+            } catch (err) {
+                return '--:--';
+            }
+        }
+
+        function songLabel(entry) {
+            if (entry.artist && entry.title) {
+                return `<span class="artist">${escapeHtml(entry.artist)}</span> — ${escapeHtml(entry.title)}`;
+            }
+            return escapeHtml(entry.title || entry.raw || 'Unknown');
+        }
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function groupByDay(entries) {
+            const groups = [];
+            const map = new Map();
+            for (const entry of entries) {
+                const key = dayKey(entry.playedAt);
+                if (!map.has(key)) {
+                    const group = { key, label: formatDayLabel(entry.playedAt), entries: [] };
+                    map.set(key, group);
+                    groups.push(group);
+                }
+                map.get(key).entries.push(entry);
+            }
+            return groups;
+        }
+
+        function setActiveStation(id) {
+            activeStation = id;
+            localStorage.setItem('historyStation', id);
+            tabsEl.querySelectorAll('button').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.id === id);
+                btn.setAttribute('aria-selected', btn.dataset.id === id ? 'true' : 'false');
+            });
+            panelsEl.querySelectorAll('.station-panel').forEach(panel => {
+                panel.classList.toggle('active', panel.dataset.id === id);
+            });
+        }
+
+        function render(history) {
+            updatedAtEl.textContent = formatUpdatedAt(history.updatedAt);
+            tabsEl.innerHTML = '';
+            panelsEl.innerHTML = '';
+
+            const stations = history.stations || {};
+            const ids = stationOrder.filter(id => stations[id]);
+
+            if (!ids.includes(activeStation) && ids.length) {
+                activeStation = ids[0];
+            }
+
+            ids.forEach(id => {
+                const station = stations[id];
+                const tab = document.createElement('button');
+                tab.type = 'button';
+                tab.dataset.id = id;
+                tab.textContent = station.name;
+                tab.setAttribute('role', 'tab');
+                tab.addEventListener('click', () => setActiveStation(id));
+                tabsEl.appendChild(tab);
+
+                const panel = document.createElement('section');
+                panel.className = 'station-panel';
+                panel.dataset.id = id;
+                panel.setAttribute('role', 'tabpanel');
+
+                const heading = document.createElement('h2');
+                heading.textContent = station.name;
+                panel.appendChild(heading);
+
+                const entries = Array.isArray(station.entries) ? station.entries : [];
+                if (!entries.length) {
+                    const empty = document.createElement('div');
+                    empty.className = 'empty-state';
+                    empty.textContent = id === '3'
+                        ? 'No songs logged yet. This station often publishes empty now-playing metadata.'
+                        : 'No songs logged yet. Check back after the monitor has run.';
+                    panel.appendChild(empty);
+                } else {
+                    const groups = groupByDay(entries);
+                    groups.forEach(group => {
+                        const wrap = document.createElement('div');
+                        wrap.className = 'day-group';
+
+                        const label = document.createElement('div');
+                        label.className = 'day-label';
+                        label.textContent = group.label;
+                        wrap.appendChild(label);
+
+                        const list = document.createElement('ul');
+                        list.className = 'play-list';
+                        group.entries.forEach(entry => {
+                            const li = document.createElement('li');
+                            li.innerHTML =
+                                `<span class="play-time">${escapeHtml(formatTime(entry.playedAt))}</span>` +
+                                `<span class="play-song">${songLabel(entry)}</span>`;
+                            list.appendChild(li);
+                        });
+                        wrap.appendChild(list);
+                        panel.appendChild(wrap);
+                    });
+                }
+
+                panelsEl.appendChild(panel);
+            });
+
+            setActiveStation(activeStation);
+        }
+
+        async function loadHistory() {
+            try {
+                const response = await fetch(`data/history.json?_=${Date.now()}`, {
+                    headers: { Accept: 'application/json' },
+                    cache: 'no-store'
+                });
+                if (!response.ok) throw new Error('Could not load history.json');
+                const data = await response.json();
+                loadErrorEl.style.display = 'none';
+                render(data);
+            } catch (err) {
+                updatedAtEl.textContent = 'History unavailable.';
+                loadErrorEl.style.display = 'block';
+                loadErrorEl.textContent = 'Could not load played-song history. Try refreshing in a moment.';
+                console.log(err);
+            }
+        }
+
+        loadHistory();
+    </script>
+</body>
+
+</html>

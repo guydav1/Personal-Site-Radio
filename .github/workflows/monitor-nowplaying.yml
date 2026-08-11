@@ -1,0 +1,45 @@
+# Dedicated station now-playing monitor (independent of the live radio player).
+name: Monitor now playing
+
+on:
+  schedule:
+    # Every minute — enough for typical track lengths; Glgltz also sends segment history.
+    - cron: '* * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: monitor-nowplaying
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Poll station now-playing feeds
+        run: node scripts/monitor-nowplaying.mjs
+
+      - name: Commit history if changed
+        run: |
+          if git diff --quiet -- data/history.json; then
+            echo "No history changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/history.json
+          git commit -m "Update song history from now-playing monitor."
+          git push
