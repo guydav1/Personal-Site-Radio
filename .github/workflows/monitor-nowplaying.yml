@@ -3,8 +3,9 @@ name: Monitor now playing
 
 on:
   schedule:
-    # Every minute — enough for typical track lengths; Glgltz also sends segment history.
-    - cron: '* * * * *'
+    # GitHub will not reliably run cron denser than every 5 minutes.
+    # Offset from :00/:30 to reduce schedule congestion.
+    - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -17,7 +18,7 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -30,6 +31,10 @@ jobs:
           node-version: '24'
 
       - name: Poll station now-playing feeds
+        env:
+          # Loop inside the job (~4.5 min @ 60s) to approximate 1-minute sampling.
+          MONITOR_DURATION_MS: '270000'
+          MONITOR_INTERVAL_MS: '60000'
         run: node scripts/monitor-nowplaying.mjs
 
       - name: Commit history if changed

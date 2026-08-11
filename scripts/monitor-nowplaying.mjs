@@ -279,8 +279,11 @@ function shouldAppendSnapshot(existingEntries, incoming) {
     });
 }
 
-async function main() {
-    const history = loadHistory();
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function pollOnce(history) {
     let changed = false;
     const summary = [];
 
@@ -312,6 +315,27 @@ async function main() {
         console.log('history unchanged');
     }
     console.log(summary.join(' | '));
+    return changed;
+}
+
+async function main() {
+    // GitHub Actions won't honor cron denser than ~5 minutes. In CI we loop inside
+    // one job so we still sample about once a minute between scheduled starts.
+    const durationMs = Math.max(0, Number(process.env.MONITOR_DURATION_MS || 0) || 0);
+    const intervalMs = Math.max(15000, Number(process.env.MONITOR_INTERVAL_MS || 60000) || 60000);
+    const history = loadHistory();
+    const started = Date.now();
+    let pass = 0;
+
+    do {
+        pass += 1;
+        console.log(`poll pass ${pass}`);
+        await pollOnce(history);
+        if (!durationMs) break;
+        const elapsed = Date.now() - started;
+        if (elapsed + intervalMs >= durationMs) break;
+        await sleep(intervalMs);
+    } while (Date.now() - started < durationMs);
 }
 
 main().catch(err => {
