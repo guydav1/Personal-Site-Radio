@@ -1,9 +1,30 @@
 {
-  "updatedAt": "2026-08-11T20:42:57.731Z",
+  "updatedAt": "2026-08-11T21:06:24.443Z",
   "stations": {
     "0": {
       "name": "Glgltz",
       "entries": [
+        {
+          "artist": "נינט טייב",
+          "title": "היא יודעת",
+          "raw": "נינט טייב - היא יודעת",
+          "playedAt": "2026-08-11T21:02:49Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "",
+          "title": "יניב יוסף עושה לי את הלילה 4",
+          "raw": "יניב יוסף עושה לי את הלילה 4",
+          "playedAt": "2026-08-11T20:59:59Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "",
+          "title": "אות גלגלצ עם החיילים",
+          "raw": "אות גלגלצ עם החיילים",
+          "playedAt": "2026-08-11T20:59:56Z",
+          "source": "liveSchedule"
+        },
         {
           "artist": "החברים של נטאשה",
           "title": "אני לא רוקד כשעצוב",
@@ -15,11 +36,40 @@
     },
     "1": {
       "name": "Eco",
-      "entries": []
+      "entries": [
+        {
+          "artist": "Tame Impala",
+          "title": "Feels Like We Only Go Backwards",
+          "raw": "Tame Impala - Feels Like We Only Go Backwards",
+          "playedAt": "2026-08-11T21:06:22.716Z",
+          "source": "ecoFirestore"
+        },
+        {
+          "artist": "Bob Dylan",
+          "title": "Sara",
+          "raw": "Bob Dylan - Sara",
+          "playedAt": "2026-08-11T21:03:15.528Z",
+          "source": "ecoFirestore"
+        }
+      ]
     },
     "2": {
       "name": "88FM",
       "entries": [
+        {
+          "artist": "Talking Heads",
+          "title": "Making Flippy Floppy - 2003 Remaster",
+          "raw": "Talking Heads - Making Flippy Floppy - 2003 Remaster",
+          "playedAt": "2026-08-11T21:05:21.407Z",
+          "source": "kanAcr"
+        },
+        {
+          "artist": "Talking Heads",
+          "title": "Burning Down The House - 2005 Remastered Version",
+          "raw": "Talking Heads - Burning Down The House - 2005 Remastered Version",
+          "playedAt": "2026-08-11T21:03:16.523Z",
+          "source": "kanAcr"
+        },
         {
           "artist": "Fela Kuti",
           "title": "Expensive Shit",
