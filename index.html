@@ -7,111 +7,207 @@
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="favicon.svg">
     <title>Radio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
-        html {
-            font-family: sans-serif;
-            line-height: 1.2em;
-            background-color: rgb(0, 0, 0);
+        :root {
+            --bg: #0b0d10;
+            --bg-elevated: #12151a;
+            --bg-soft: #1a1f27;
+            --line: rgba(255, 255, 255, 0.08);
+            --line-strong: rgba(255, 255, 255, 0.14);
+            --text: #eef1f5;
+            --muted: #9aa3b2;
+            --faint: #6b7380;
+            --accent: #d4a017;
+            --accent-soft: rgba(212, 160, 23, 0.14);
+            --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+            --radius: 14px;
+            --max: 1180px;
+            --font: "Outfit", sans-serif;
+            --mono: "IBM Plex Mono", ui-monospace, monospace;
         }
 
-        .player {
+        * { box-sizing: border-box; }
+
+        html {
+            font-family: var(--font);
+            line-height: 1.35;
+            background:
+                radial-gradient(1200px 500px at 10% -10%, rgba(212, 160, 23, 0.12), transparent 55%),
+                radial-gradient(900px 420px at 90% 0%, rgba(80, 120, 180, 0.12), transparent 50%),
+                var(--bg);
+            color: var(--text);
+            min-height: 100%;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        a { color: inherit; }
+
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            backdrop-filter: blur(14px);
+            background: rgba(11, 13, 16, 0.82);
+            border-bottom: 1px solid var(--line);
+        }
+
+        .topbar-inner {
+            width: min(var(--max), calc(100% - 2.5rem));
             margin: 0 auto;
-            padding: 1% 1.5em;
-            margin-top: 5%;
-            width: 380px;
-            max-width: calc(100% - 2em);
-            background-color: white;
-            border-radius: 5px;
-            box-shadow: 1px 1px 5px rgb(139, 139, 139);
+            min-height: 4rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .brand {
+            display: flex;
+            align-items: baseline;
+            gap: 0.7rem;
+            text-decoration: none;
+        }
+
+        .brand-mark {
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            font-size: 1.05rem;
+        }
+
+        .brand-sub {
+            color: var(--faint);
+            font-size: 0.8rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
         }
 
         .site-nav {
             display: flex;
-            justify-content: center;
-            gap: 0.35em;
-            padding-top: 0.75em;
+            gap: 0.25rem;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 0.25rem;
+            border-radius: 999px;
+            border: 1px solid var(--line);
         }
 
         .site-nav a {
             text-decoration: none;
-            color: #555;
-            font-size: 0.85em;
-            letter-spacing: 0.04em;
+            color: var(--muted);
+            font-size: 0.82rem;
+            font-weight: 500;
+            letter-spacing: 0.06em;
             text-transform: uppercase;
-            padding: 0.4em 0.85em;
-            border-radius: 5px;
+            padding: 0.45rem 0.95rem;
+            border-radius: 999px;
+            transition: background 0.18s ease, color 0.18s ease;
         }
 
-        .site-nav a:hover {
-            background: rgba(0, 0, 0, 0.06);
-            color: #222;
-        }
+        .site-nav a:hover { color: var(--text); }
 
         .site-nav a.active {
-            background: rgba(0, 0, 0, 0.45);
-            color: #fff;
+            background: var(--accent);
+            color: #14110a;
+        }
+
+        .page {
+            width: min(var(--max), calc(100% - 2.5rem));
+            margin: 0 auto;
+            padding: 2.25rem 0 3rem;
+            display: flex;
+            justify-content: center;
+        }
+
+        .player {
+            width: 380px;
+            max-width: 100%;
+            padding: 1.15em 1.25em 1.35em;
+            background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent), var(--bg-elevated);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            animation: rise 0.45s ease both;
         }
 
         .header {
-            padding: 3%;
             text-align: center;
+            margin-bottom: 0.85rem;
+        }
+
+        @media (max-width: 640px) {
+            .topbar-inner,
+            .page { width: min(var(--max), calc(100% - 1.25rem)); }
+            .brand-sub { display: none; }
         }
 
         #title {
-            margin: 0 0 0.4em;
-            font-size: 1.4em;
+            margin: 0;
+            font-size: 1.35rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
         }
 
         .now-playing {
-            margin: 0.5em 0 1em;
-            padding: 0.75em;
-            background: rgba(0, 0, 0, 0.06);
-            border-radius: 5px;
+            margin: 0 0 1rem;
+            padding: 0.9rem 0.85rem;
+            background: var(--bg-soft);
+            border: 1px solid var(--line);
+            border-radius: 12px;
             text-align: center;
         }
 
         .now-playing-label {
-            font-size: 0.75em;
-            letter-spacing: 0.04em;
+            font-size: 0.7rem;
+            letter-spacing: 0.08em;
             text-transform: uppercase;
-            color: #666;
-            margin-bottom: 0.35em;
+            color: var(--faint);
+            margin-bottom: 0.4em;
+            font-weight: 600;
         }
 
         #songMeta {
-            font-size: 1em;
-            line-height: 1.35em;
-            min-height: 1.35em;
+            font-size: 1rem;
+            line-height: 1.4;
+            min-height: 1.4em;
             word-break: break-word;
+            font-weight: 600;
+            letter-spacing: -0.01em;
         }
 
         #songMeta.unknown {
-            color: #888;
+            color: var(--muted);
             font-style: italic;
+            font-weight: 500;
         }
 
         .meta-actions {
             display: flex;
-            gap: 0.15em;
-            margin-top: 0.65em;
+            gap: 0.2em;
+            margin-top: 0.7em;
             justify-content: center;
             align-items: center;
         }
 
         button.icon-btn {
-            border: none;
+            border: 1px solid transparent;
             background: transparent;
-            color: #777;
-            width: 2rem;
-            height: 2rem;
+            color: var(--muted);
+            width: 2.1rem;
+            height: 2.1rem;
             padding: 0;
             border-radius: 999px;
             cursor: pointer;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            transition: color 0.15s ease, background 0.15s ease;
+            transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
         }
 
         button.icon-btn svg {
@@ -121,8 +217,9 @@
         }
 
         button.icon-btn:hover:not(:disabled) {
-            color: #222;
-            background: rgba(0, 0, 0, 0.06);
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--line-strong);
         }
 
         button.icon-btn:disabled {
@@ -131,19 +228,27 @@
         }
 
         button.icon-btn.busy {
-            color: #222;
+            color: var(--accent);
+            border-color: rgba(212, 160, 23, 0.35);
+            background: var(--accent-soft);
             animation: pulse 1s ease-in-out infinite;
         }
 
         @keyframes pulse {
-            50% { opacity: 0.35; }
+            50% { opacity: 0.45; }
+        }
+
+        @keyframes rise {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         #downloadStatus {
-            margin-top: 0.45em;
-            font-size: 0.75em;
-            color: #888;
+            margin-top: 0.5em;
+            font-size: 0.72em;
+            color: var(--faint);
             min-height: 1.1em;
+            font-family: var(--mono);
         }
 
         #channels {
@@ -154,66 +259,86 @@
 
         #channels li {
             text-align: center;
-            background-color: rgba(0, 0, 0, 0.2);
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--line);
             width: auto;
             max-width: 100%;
-            padding: 0.55em 0.7em;
-            margin: 0.55em 0;
-            border-radius: 5px;
+            padding: 0.65em 0.75em;
+            margin: 0.45em 0;
+            border-radius: 12px;
             line-height: 1.25;
+            cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
         }
 
         #channels li:hover {
-            background-color: rgba(0, 0, 0, 0.1);
-            cursor: pointer;
+            background: rgba(255, 255, 255, 0.055);
+            border-color: var(--line-strong);
         }
 
         #channels li.active {
-            background-color: rgba(0, 0, 0, 0.45);
-            color: #fff;
+            background: var(--accent-soft);
+            border-color: rgba(212, 160, 23, 0.45);
+            color: var(--text);
         }
 
         .channel-name {
             display: block;
-            font-weight: 600;
+            font-weight: 650;
+            letter-spacing: -0.01em;
         }
 
         .channel-np {
             display: block;
             margin-top: 0.28em;
             font-size: 0.78em;
-            line-height: 1.3;
-            color: #444;
+            line-height: 1.35;
+            color: var(--muted);
             word-break: break-word;
         }
 
         .channel-np.unknown {
-            color: #888;
+            color: var(--faint);
             font-style: italic;
         }
 
         #channels li.active .channel-np {
-            color: rgba(255, 255, 255, 0.88);
+            color: #f0d48a;
         }
 
         #channels li.active .channel-np.unknown {
-            color: rgba(255, 255, 255, 0.65);
+            color: rgba(240, 212, 138, 0.65);
         }
 
         audio {
             width: 100%;
+            margin-top: 0.15rem;
+            border-radius: 10px;
+            outline: none;
+        }
+
+        audio::-webkit-media-controls-panel {
+            background: var(--bg-soft);
         }
     </style>
 </head>
 
 <body>
+    <header class="topbar">
+        <div class="topbar-inner">
+            <a class="brand" href="index.html">
+                <span class="brand-mark">Radio</span>
+                <span class="brand-sub">Stations</span>
+            </a>
+            <nav class="site-nav" aria-label="Site">
+                <a href="index.html" class="active" aria-current="page">Live</a>
+                <a href="history.html">History</a>
+            </nav>
+        </div>
+    </header>
 
+    <main class="page">
     <div class="player">
-        <nav class="site-nav" aria-label="Site">
-            <a href="index.html" class="active" aria-current="page">Live</a>
-            <a href="history.html">History</a>
-        </nav>
-
         <div class="header">
             <h1 id="title">Playing: ...</h1>
         </div>
@@ -252,6 +377,7 @@
         </div>
         <audio id="player" controls></audio>
     </div>
+    </main>
 
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.7/dist/hls.min.js"></script>
     <script>
