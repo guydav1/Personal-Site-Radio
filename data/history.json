@@ -1,9 +1,37 @@
 {
-  "updatedAt": "2026-08-11T22:24:10.944Z",
+  "updatedAt": "2026-08-11T23:11:04.705Z",
   "stations": {
     "0": {
       "name": "Glgltz",
       "entries": [
+        {
+          "artist": "רוני דלומי",
+          "title": "איש של לילה",
+          "raw": "רוני דלומי - איש של לילה",
+          "playedAt": "2026-08-11T23:13:40Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "Bruno Mars",
+          "title": "Cha Cha Cha",
+          "raw": "Bruno Mars - Cha Cha Cha",
+          "playedAt": "2026-08-11T23:09:48Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "Soul II Soul",
+          "title": "Back To Life",
+          "raw": "Soul II Soul - Back To Life",
+          "playedAt": "2026-08-11T23:06:10Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "Ibeyi",
+          "title": "River",
+          "raw": "Ibeyi - River",
+          "playedAt": "2026-08-11T23:02:02Z",
+          "source": "liveSchedule"
+        },
         {
           "artist": "דנה ברגר",
           "title": "מחכה לו",
@@ -80,6 +108,13 @@
       "name": "Eco",
       "entries": [
         {
+          "artist": "Bob Marley & The Wailers",
+          "title": "No Woman, No Cry",
+          "raw": "Bob Marley & The Wailers - No Woman, No Cry",
+          "playedAt": "2026-08-11T23:06:51.236Z",
+          "source": "ecoFirestore"
+        },
+        {
           "artist": "Sharon Lifshitz",
           "title": "Kashe Biladecha",
           "raw": "Sharon Lifshitz - Kashe Biladecha",
@@ -126,6 +161,20 @@
     "2": {
       "name": "88FM",
       "entries": [
+        {
+          "artist": "Nils Frahm",
+          "title": "As a Reminder",
+          "raw": "Nils Frahm - As a Reminder",
+          "playedAt": "2026-08-11T23:08:57.087Z",
+          "source": "kanAcr"
+        },
+        {
+          "artist": "Nils Frahm",
+          "title": "Acting",
+          "raw": "Nils Frahm - Acting",
+          "playedAt": "2026-08-11T23:06:52.330Z",
+          "source": "kanAcr"
+        },
         {
           "artist": "Nils Frahm",
           "title": "4:33 (A Tribute to John Cage)",
