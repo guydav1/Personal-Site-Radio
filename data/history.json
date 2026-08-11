@@ -1,9 +1,30 @@
 {
-  "updatedAt": "2026-08-11T21:35:51.368Z",
+  "updatedAt": "2026-08-11T22:24:10.944Z",
   "stations": {
     "0": {
       "name": "Glgltz",
       "entries": [
+        {
+          "artist": "דנה ברגר",
+          "title": "מחכה לו",
+          "raw": "דנה ברגר - מחכה לו",
+          "playedAt": "2026-08-11T22:23:42Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "גיא מזיג",
+          "title": "רוצה שנתממש",
+          "raw": "גיא מזיג - רוצה שנתממש",
+          "playedAt": "2026-08-11T22:20:00Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "Prince,the Revolution",
+          "title": "Kiss",
+          "raw": "Prince,the Revolution - Kiss",
+          "playedAt": "2026-08-11T22:16:19Z",
+          "source": "liveSchedule"
+        },
         {
           "artist": "אסף אמדורסקי",
           "title": "בראשית",
@@ -59,6 +80,20 @@
       "name": "Eco",
       "entries": [
         {
+          "artist": "Sharon Lifshitz",
+          "title": "Kashe Biladecha",
+          "raw": "Sharon Lifshitz - Kashe Biladecha",
+          "playedAt": "2026-08-11T22:23:06.621Z",
+          "source": "ecoFirestore"
+        },
+        {
+          "artist": "Ellie Goulding",
+          "title": "Love Me Like You Do (From \"Fifty Shades of Grey\")",
+          "raw": "Ellie Goulding - Love Me Like You Do (From \"Fifty Shades of Grey\")",
+          "playedAt": "2026-08-11T22:19:58.232Z",
+          "source": "ecoFirestore"
+        },
+        {
           "artist": "Aviv Geffen",
           "title": "Sof Ha'Olam",
           "raw": "Aviv Geffen - Sof Ha'Olam",
@@ -91,6 +126,27 @@
     "2": {
       "name": "88FM",
       "entries": [
+        {
+          "artist": "Nils Frahm",
+          "title": "4:33 (A Tribute to John Cage)",
+          "raw": "Nils Frahm - 4:33 (A Tribute to John Cage)",
+          "playedAt": "2026-08-11T22:24:10.061Z",
+          "source": "kanAcr"
+        },
+        {
+          "artist": "The Doors",
+          "title": "Riders On the Storm",
+          "raw": "The Doors - Riders On the Storm",
+          "playedAt": "2026-08-11T22:23:07.522Z",
+          "source": "kanAcr"
+        },
+        {
+          "artist": "Nina Simone",
+          "title": "I Love My Baby",
+          "raw": "Nina Simone - I Love My Baby",
+          "playedAt": "2026-08-11T22:19:59.895Z",
+          "source": "kanAcr"
+        },
         {
           "artist": "Talking Heads",
           "title": "Moon Rocks - 2005 Remastered Version",
