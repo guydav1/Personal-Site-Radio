@@ -6,297 +6,568 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="favicon.svg">
-    <title>Played songs · Radio</title>
+    <title>Play history · Radio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
+        :root {
+            --bg: #0b0d10;
+            --bg-elevated: #12151a;
+            --bg-soft: #1a1f27;
+            --line: rgba(255, 255, 255, 0.08);
+            --line-strong: rgba(255, 255, 255, 0.14);
+            --text: #eef1f5;
+            --muted: #9aa3b2;
+            --faint: #6b7380;
+            --accent: #d4a017;
+            --accent-soft: rgba(212, 160, 23, 0.14);
+            --ok: #3dbe8c;
+            --danger: #e07070;
+            --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+            --radius: 14px;
+            --max: 1180px;
+            --font: "Outfit", sans-serif;
+            --mono: "IBM Plex Mono", ui-monospace, monospace;
+        }
+
+        * { box-sizing: border-box; }
+
         html {
-            font-family: sans-serif;
-            line-height: 1.35;
-            background-color: rgb(0, 0, 0);
+            font-family: var(--font);
+            background:
+                radial-gradient(1200px 500px at 10% -10%, rgba(212, 160, 23, 0.12), transparent 55%),
+                radial-gradient(900px 420px at 90% 0%, rgba(80, 120, 180, 0.12), transparent 50%),
+                var(--bg);
+            color: var(--text);
+            min-height: 100%;
         }
 
         body {
             margin: 0;
-            padding: 1.25em 1em 3em;
+            min-height: 100vh;
         }
 
-        .shell {
+        a { color: inherit; }
+
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            backdrop-filter: blur(14px);
+            background: rgba(11, 13, 16, 0.82);
+            border-bottom: 1px solid var(--line);
+        }
+
+        .topbar-inner,
+        .page {
+            width: min(var(--max), calc(100% - 2.5rem));
             margin: 0 auto;
-            width: 520px;
-            max-width: calc(100% - 1em);
-            background-color: white;
-            border-radius: 5px;
-            box-shadow: 1px 1px 5px rgb(139, 139, 139);
-            padding: 1.25em 1.4em 1.6em;
+        }
+
+        .topbar-inner {
+            min-height: 4rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .brand {
+            display: flex;
+            align-items: baseline;
+            gap: 0.7rem;
+            text-decoration: none;
+        }
+
+        .brand-mark {
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            font-size: 1.05rem;
+        }
+
+        .brand-sub {
+            color: var(--faint);
+            font-size: 0.8rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
         }
 
         .site-nav {
             display: flex;
-            justify-content: center;
-            gap: 0.35em;
-            margin-bottom: 1em;
+            gap: 0.25rem;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 0.25rem;
+            border-radius: 999px;
+            border: 1px solid var(--line);
         }
 
         .site-nav a {
             text-decoration: none;
-            color: #555;
-            font-size: 0.85em;
-            letter-spacing: 0.04em;
+            color: var(--muted);
+            font-size: 0.82rem;
+            font-weight: 500;
+            letter-spacing: 0.06em;
             text-transform: uppercase;
-            padding: 0.4em 0.85em;
-            border-radius: 5px;
+            padding: 0.45rem 0.95rem;
+            border-radius: 999px;
+            transition: background 0.18s ease, color 0.18s ease;
         }
 
-        .site-nav a:hover {
-            background: rgba(0, 0, 0, 0.06);
-            color: #222;
-        }
-
+        .site-nav a:hover { color: var(--text); }
         .site-nav a.active {
-            background: rgba(0, 0, 0, 0.45);
-            color: #fff;
+            background: var(--accent);
+            color: #14110a;
         }
 
-        .header {
-            text-align: center;
-            margin-bottom: 1em;
+        .page {
+            padding: 2.25rem 0 4rem;
         }
 
-        .header h1 {
-            margin: 0 0 0.35em;
-            font-size: 1.45em;
+        .hero {
+            display: grid;
+            gap: 0.75rem;
+            margin-bottom: 1.75rem;
+            animation: rise 0.45s ease both;
         }
 
-        .header p {
+        .hero h1 {
             margin: 0;
-            color: #666;
-            font-size: 0.92em;
+            font-size: clamp(1.9rem, 3vw, 2.6rem);
+            letter-spacing: -0.03em;
+            font-weight: 700;
+        }
+
+        .hero p {
+            margin: 0;
+            max-width: 40rem;
+            color: var(--muted);
+            font-size: 1.02rem;
+            line-height: 1.5;
         }
 
         #updatedAt {
-            margin-top: 0.55em;
-            font-size: 0.78em;
-            color: #888;
-            min-height: 1.1em;
+            color: var(--faint);
+            font-family: var(--mono);
+            font-size: 0.78rem;
         }
 
-        .station-tabs {
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.85rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .kpi {
+            background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent), var(--bg-elevated);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            padding: 1rem 1.1rem 1.05rem;
+            box-shadow: var(--shadow);
+            animation: rise 0.5s ease both;
+        }
+
+        .kpi:nth-child(2) { animation-delay: 0.05s; }
+        .kpi:nth-child(3) { animation-delay: 0.1s; }
+        .kpi:nth-child(4) { animation-delay: 0.15s; }
+
+        .kpi-label {
+            color: var(--faint);
+            font-size: 0.72rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 0.45rem;
+        }
+
+        .kpi-value {
+            font-size: 1.7rem;
+            font-weight: 650;
+            letter-spacing: -0.03em;
+            line-height: 1.1;
+        }
+
+        .kpi-hint {
+            margin-top: 0.35rem;
+            color: var(--muted);
+            font-size: 0.8rem;
+        }
+
+        .toolbar {
+            position: sticky;
+            top: 4rem;
+            z-index: 15;
+            display: grid;
+            gap: 0.85rem;
+            padding: 0.95rem;
+            margin-bottom: 1.1rem;
+            background: rgba(18, 21, 26, 0.92);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            backdrop-filter: blur(12px);
+            box-shadow: var(--shadow);
+            animation: rise 0.55s ease both;
+        }
+
+        .toolbar-row {
             display: flex;
             flex-wrap: wrap;
-            gap: 0.35em;
-            justify-content: center;
-            margin: 1em 0 1.25em;
+            gap: 0.65rem;
+            align-items: center;
         }
 
-        .station-tabs button {
-            border: none;
-            background: rgba(0, 0, 0, 0.12);
-            color: #222;
-            padding: 0.45em 0.8em;
-            border-radius: 5px;
+        .search-wrap {
+            flex: 1 1 220px;
+            position: relative;
+        }
+
+        .search-wrap input,
+        .select-wrap select {
+            width: 100%;
+            appearance: none;
+            border: 1px solid var(--line-strong);
+            background: var(--bg-soft);
+            color: var(--text);
+            border-radius: 10px;
+            padding: 0.7rem 0.9rem;
+            font: inherit;
+            font-size: 0.92rem;
+            outline: none;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .search-wrap input:focus,
+        .select-wrap select:focus {
+            border-color: rgba(212, 160, 23, 0.55);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+
+        .select-wrap {
+            flex: 0 1 180px;
+            min-width: 150px;
+        }
+
+        .chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+
+        .chip {
+            border: 1px solid var(--line-strong);
+            background: transparent;
+            color: var(--muted);
+            border-radius: 999px;
+            padding: 0.4rem 0.8rem;
+            font: inherit;
+            font-size: 0.82rem;
+            font-weight: 500;
             cursor: pointer;
-            font-size: 0.9em;
+            transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
         }
 
-        .station-tabs button:hover {
-            background: rgba(0, 0, 0, 0.18);
+        .chip:hover {
+            color: var(--text);
+            border-color: rgba(255, 255, 255, 0.28);
         }
 
-        .station-tabs button.active {
-            background: rgba(0, 0, 0, 0.45);
-            color: #fff;
+        .chip.active {
+            background: var(--accent-soft);
+            border-color: rgba(212, 160, 23, 0.45);
+            color: #f3d27a;
         }
 
-        .station-panel {
-            display: none;
-        }
-
-        .station-panel.active {
-            display: block;
-        }
-
-        .station-panel h2 {
-            margin: 0 0 0.75em;
-            font-size: 1.1em;
-            text-align: center;
-        }
-
-        .day-group {
-            margin-bottom: 1.25em;
-        }
-
-        .day-label {
-            font-size: 0.75em;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            color: #666;
-            margin: 0 0 0.45em;
-            padding-bottom: 0.25em;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-        }
-
-        .play-list {
-            list-style: none;
-            margin: 0;
-            padding: 0;
-        }
-
-        .play-list li {
-            display: grid;
-            grid-template-columns: 4.2em 1fr;
-            gap: 0.65em;
-            padding: 0.45em 0.15em;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        .results-meta {
+            display: flex;
+            justify-content: space-between;
             align-items: baseline;
+            gap: 1rem;
+            margin-bottom: 0.75rem;
+            color: var(--muted);
+            font-size: 0.88rem;
         }
 
-        .play-list li:last-child {
+        .panel {
+            background: var(--bg-elevated);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            animation: rise 0.6s ease both;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead th {
+            text-align: left;
+            font-size: 0.72rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--faint);
+            font-weight: 600;
+            padding: 0.85rem 1rem;
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid var(--line);
+            white-space: nowrap;
+        }
+
+        tbody td {
+            padding: 0.85rem 1rem;
+            border-bottom: 1px solid var(--line);
+            vertical-align: middle;
+        }
+
+        tbody tr {
+            transition: background 0.15s ease;
+        }
+
+        tbody tr:hover {
+            background: rgba(255, 255, 255, 0.025);
+        }
+
+        tbody tr:last-child td {
             border-bottom: none;
         }
 
-        .play-time {
-            font-size: 0.82em;
-            color: #777;
-            font-variant-numeric: tabular-nums;
+        .col-time {
+            width: 7.5rem;
+            font-family: var(--mono);
+            font-size: 0.82rem;
+            color: var(--muted);
+            white-space: nowrap;
         }
 
-        .play-song {
-            font-size: 0.95em;
-            word-break: break-word;
+        .col-station {
+            width: 7rem;
         }
 
-        .play-song .artist {
-            color: #444;
+        .station-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.22rem 0.55rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--line);
+            font-size: 0.78rem;
+            font-weight: 500;
+            color: var(--text);
+            white-space: nowrap;
         }
 
-        .empty-state {
+        .station-dot {
+            width: 0.45rem;
+            height: 0.45rem;
+            border-radius: 50%;
+            background: var(--accent);
+        }
+
+        .col-artist {
+            color: var(--muted);
+            font-weight: 500;
+        }
+
+        .col-title {
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        .day-banner td {
+            padding: 0.65rem 1rem;
+            background: rgba(212, 160, 23, 0.06);
+            color: #f0d48a;
+            font-size: 0.75rem;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            font-weight: 600;
+            border-bottom: 1px solid rgba(212, 160, 23, 0.12);
+        }
+
+        .empty,
+        .error {
+            padding: 3rem 1.25rem;
             text-align: center;
-            color: #888;
-            font-style: italic;
-            padding: 1.5em 0.5em;
-            background: rgba(0, 0, 0, 0.04);
-            border-radius: 5px;
+            color: var(--muted);
         }
+
+        .empty strong,
+        .error strong {
+            display: block;
+            color: var(--text);
+            font-size: 1.15rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .error { color: var(--danger); }
 
         .footer-note {
-            margin-top: 1.4em;
-            text-align: center;
-            font-size: 0.75em;
-            color: #999;
-            line-height: 1.4;
+            margin-top: 1.25rem;
+            color: var(--faint);
+            font-size: 0.8rem;
+            line-height: 1.45;
         }
 
         .footer-note a {
-            color: #666;
+            color: var(--muted);
+            text-decoration: underline;
+            text-underline-offset: 0.15em;
         }
 
-        #loadError {
-            display: none;
-            text-align: center;
-            color: #a33;
-            background: rgba(160, 40, 40, 0.08);
-            border-radius: 5px;
-            padding: 0.75em;
-            margin-bottom: 1em;
-            font-size: 0.9em;
+        @keyframes rise {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 900px) {
+            .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .col-artist { display: none; }
+            thead th:nth-child(3) { display: none; }
+        }
+
+        @media (max-width: 640px) {
+            .topbar-inner,
+            .page { width: min(var(--max), calc(100% - 1.25rem)); }
+            .brand-sub { display: none; }
+            .kpi-grid { grid-template-columns: 1fr 1fr; }
+            .col-station { display: none; }
+            thead th:nth-child(2) { display: none; }
+            .col-time { width: 4.8rem; }
+            table { font-size: 0.92rem; }
         }
     </style>
 </head>
 
 <body>
-    <div class="shell">
-        <nav class="site-nav" aria-label="Site">
-            <a href="index.html">Live</a>
-            <a href="history.html" class="active" aria-current="page">History</a>
-        </nav>
+    <header class="topbar">
+        <div class="topbar-inner">
+            <a class="brand" href="index.html">
+                <span class="brand-mark">Radio</span>
+                <span class="brand-sub">Play history</span>
+            </a>
+            <nav class="site-nav" aria-label="Site">
+                <a href="index.html">Live</a>
+                <a href="history.html" class="active" aria-current="page">History</a>
+            </nav>
+        </div>
+    </header>
 
-        <header class="header">
-            <h1>Played songs</h1>
-            <p>Recent tracks logged from each station’s now-playing feed.</p>
+    <main class="page">
+        <section class="hero">
+            <h1>What played</h1>
+            <p>Logged from each station’s now-playing feed by a background monitor — searchable, filterable, and sorted the way you want.</p>
             <div id="updatedAt">Loading history…</div>
-        </header>
+        </section>
 
-        <div id="loadError"></div>
-        <div class="station-tabs" id="stationTabs" role="tablist" aria-label="Stations"></div>
-        <div id="stationPanels"></div>
+        <section class="kpi-grid" aria-label="Summary">
+            <article class="kpi">
+                <div class="kpi-label">Plays shown</div>
+                <div class="kpi-value" id="kpiPlays">—</div>
+                <div class="kpi-hint" id="kpiPlaysHint">Matching current filters</div>
+            </article>
+            <article class="kpi">
+                <div class="kpi-label">Unique tracks</div>
+                <div class="kpi-value" id="kpiUnique">—</div>
+                <div class="kpi-hint">Distinct artist + title</div>
+            </article>
+            <article class="kpi">
+                <div class="kpi-label">Top station</div>
+                <div class="kpi-value" id="kpiTopStation">—</div>
+                <div class="kpi-hint" id="kpiTopStationHint">Most plays in view</div>
+            </article>
+            <article class="kpi">
+                <div class="kpi-label">Coverage</div>
+                <div class="kpi-value" id="kpiCoverage">—</div>
+                <div class="kpi-hint" id="kpiCoverageHint">Stations with data</div>
+            </article>
+        </section>
+
+        <section class="toolbar" aria-label="Filters">
+            <div class="toolbar-row">
+                <div class="search-wrap">
+                    <input id="searchInput" type="search" placeholder="Search artist or title…" autocomplete="off">
+                </div>
+                <div class="select-wrap">
+                    <label class="visually-hidden" for="rangeSelect" style="position:absolute;left:-9999px">Date range</label>
+                    <select id="rangeSelect" aria-label="Date range">
+                        <option value="all">All time</option>
+                        <option value="24h" selected>Last 24 hours</option>
+                        <option value="7d">Last 7 days</option>
+                        <option value="today">Today (Israel)</option>
+                    </select>
+                </div>
+                <div class="select-wrap">
+                    <label class="visually-hidden" for="sortSelect" style="position:absolute;left:-9999px">Sort</label>
+                    <select id="sortSelect" aria-label="Sort order">
+                        <option value="newest" selected>Newest first</option>
+                        <option value="oldest">Oldest first</option>
+                        <option value="artist">Artist A–Z</option>
+                        <option value="title">Title A–Z</option>
+                        <option value="station">Station A–Z</option>
+                    </select>
+                </div>
+                <div class="select-wrap">
+                    <label class="visually-hidden" for="groupSelect" style="position:absolute;left:-9999px">Group by</label>
+                    <select id="groupSelect" aria-label="Group by">
+                        <option value="day" selected>Group by day</option>
+                        <option value="none">Flat list</option>
+                    </select>
+                </div>
+            </div>
+            <div class="chip-row" id="stationChips" role="group" aria-label="Stations"></div>
+        </section>
+
+        <div class="results-meta">
+            <div id="resultsCount">Preparing…</div>
+            <div id="resultsSortHint"></div>
+        </div>
+
+        <section class="panel" aria-live="polite">
+            <div id="tableWrap"></div>
+        </section>
 
         <p class="footer-note">
-            Updated about once a minute by a background monitor.
-            Short tracks can still be missed on some stations.
-            <a href="index.html">Back to live radio</a>
+            History is written about once a minute from public now-playing feeds.
+            Glgltz uses schedule segments; other stations log on song change.
+            <a href="index.html">Return to live radio</a>
         </p>
-    </div>
+    </main>
 
     <script>
         const TIME_ZONE = 'Asia/Jerusalem';
-        const tabsEl = document.getElementById('stationTabs');
-        const panelsEl = document.getElementById('stationPanels');
-        const updatedAtEl = document.getElementById('updatedAt');
-        const loadErrorEl = document.getElementById('loadError');
+        const STATION_ORDER = ['0', '1', '2', '3'];
+        const STATION_COLORS = {
+            '0': '#d4a017',
+            '1': '#3dbe8c',
+            '2': '#6aa8ff',
+            '3': '#e07a5f'
+        };
 
-        const stationOrder = ['0', '1', '2', '3'];
-        let activeStation = localStorage.getItem('historyStation') || '0';
+        const els = {
+            updatedAt: document.getElementById('updatedAt'),
+            stationChips: document.getElementById('stationChips'),
+            searchInput: document.getElementById('searchInput'),
+            rangeSelect: document.getElementById('rangeSelect'),
+            sortSelect: document.getElementById('sortSelect'),
+            groupSelect: document.getElementById('groupSelect'),
+            tableWrap: document.getElementById('tableWrap'),
+            resultsCount: document.getElementById('resultsCount'),
+            resultsSortHint: document.getElementById('resultsSortHint'),
+            kpiPlays: document.getElementById('kpiPlays'),
+            kpiPlaysHint: document.getElementById('kpiPlaysHint'),
+            kpiUnique: document.getElementById('kpiUnique'),
+            kpiTopStation: document.getElementById('kpiTopStation'),
+            kpiTopStationHint: document.getElementById('kpiTopStationHint'),
+            kpiCoverage: document.getElementById('kpiCoverage'),
+            kpiCoverageHint: document.getElementById('kpiCoverageHint')
+        };
 
-        function formatUpdatedAt(iso) {
-            if (!iso) return 'No history logged yet — the monitor will fill this in.';
-            try {
-                const formatted = new Intl.DateTimeFormat('en-GB', {
-                    timeZone: TIME_ZONE,
-                    dateStyle: 'medium',
-                    timeStyle: 'short'
-                }).format(new Date(iso));
-                return `Last updated ${formatted} (Israel time)`;
-            } catch (err) {
-                return `Last updated ${iso}`;
-            }
-        }
-
-        function dayKey(iso) {
-            try {
-                return new Intl.DateTimeFormat('en-CA', {
-                    timeZone: TIME_ZONE,
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit'
-                }).format(new Date(iso));
-            } catch (err) {
-                return String(iso || '').slice(0, 10);
-            }
-        }
-
-        function formatDayLabel(iso) {
-            try {
-                return new Intl.DateTimeFormat('en-GB', {
-                    timeZone: TIME_ZONE,
-                    weekday: 'long',
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric'
-                }).format(new Date(iso));
-            } catch (err) {
-                return dayKey(iso);
-            }
-        }
-
-        function formatTime(iso) {
-            try {
-                return new Intl.DateTimeFormat('en-GB', {
-                    timeZone: TIME_ZONE,
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false
-                }).format(new Date(iso));
-            } catch (err) {
-                return '--:--';
-            }
-        }
-
-        function songLabel(entry) {
-            if (entry.artist && entry.title) {
-                return `<span class="artist">${escapeHtml(entry.artist)}</span> — ${escapeHtml(entry.title)}`;
-            }
-            return escapeHtml(entry.title || entry.raw || 'Unknown');
-        }
+        let allRows = [];
+        let stationNames = {};
+        let selectedStations = new Set(STATION_ORDER);
 
         function escapeHtml(value) {
             return String(value || '')
@@ -306,101 +577,263 @@
                 .replace(/"/g, '&quot;');
         }
 
-        function groupByDay(entries) {
-            const groups = [];
-            const map = new Map();
-            for (const entry of entries) {
-                const key = dayKey(entry.playedAt);
-                if (!map.has(key)) {
-                    const group = { key, label: formatDayLabel(entry.playedAt), entries: [] };
-                    map.set(key, group);
-                    groups.push(group);
-                }
-                map.get(key).entries.push(entry);
+        function formatUpdatedAt(iso) {
+            if (!iso) return 'Monitor has not written history yet.';
+            try {
+                return 'Updated ' + new Intl.DateTimeFormat('en-GB', {
+                    timeZone: TIME_ZONE,
+                    dateStyle: 'medium',
+                    timeStyle: 'short'
+                }).format(new Date(iso)) + ' · Israel time';
+            } catch (err) {
+                return 'Updated ' + iso;
             }
-            return groups;
         }
 
-        function setActiveStation(id) {
-            activeStation = id;
-            localStorage.setItem('historyStation', id);
-            tabsEl.querySelectorAll('button').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.id === id);
-                btn.setAttribute('aria-selected', btn.dataset.id === id ? 'true' : 'false');
-            });
-            panelsEl.querySelectorAll('.station-panel').forEach(panel => {
-                panel.classList.toggle('active', panel.dataset.id === id);
-            });
+        function dayKey(iso) {
+            return new Intl.DateTimeFormat('en-CA', {
+                timeZone: TIME_ZONE,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).format(new Date(iso));
         }
 
-        function render(history) {
-            updatedAtEl.textContent = formatUpdatedAt(history.updatedAt);
-            tabsEl.innerHTML = '';
-            panelsEl.innerHTML = '';
+        function formatDayLabel(iso) {
+            return new Intl.DateTimeFormat('en-GB', {
+                timeZone: TIME_ZONE,
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+            }).format(new Date(iso));
+        }
 
+        function formatTime(iso) {
+            return new Intl.DateTimeFormat('en-GB', {
+                timeZone: TIME_ZONE,
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).format(new Date(iso));
+        }
+
+        function formatDateTime(iso) {
+            return new Intl.DateTimeFormat('en-GB', {
+                timeZone: TIME_ZONE,
+                day: '2-digit',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).format(new Date(iso));
+        }
+
+        function israelTodayKey() {
+            return new Intl.DateTimeFormat('en-CA', {
+                timeZone: TIME_ZONE,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).format(new Date());
+        }
+
+        function flattenHistory(history) {
+            const rows = [];
             const stations = history.stations || {};
-            const ids = stationOrder.filter(id => stations[id]);
+            stationNames = {};
+            STATION_ORDER.forEach(id => {
+                const station = stations[id];
+                if (!station) return;
+                stationNames[id] = station.name || id;
+                (station.entries || []).forEach(entry => {
+                    rows.push({
+                        stationId: id,
+                        stationName: stationNames[id],
+                        artist: entry.artist || '',
+                        title: entry.title || entry.raw || '',
+                        raw: entry.raw || '',
+                        playedAt: entry.playedAt,
+                        ts: Date.parse(entry.playedAt || '') || 0
+                    });
+                });
+            });
+            return rows;
+        }
 
-            if (!ids.includes(activeStation) && ids.length) {
-                activeStation = ids[0];
+        function renderStationChips() {
+            els.stationChips.innerHTML = '';
+            const allBtn = document.createElement('button');
+            allBtn.type = 'button';
+            allBtn.className = 'chip' + (selectedStations.size === STATION_ORDER.length ? ' active' : '');
+            allBtn.textContent = 'All stations';
+            allBtn.addEventListener('click', () => {
+                selectedStations = new Set(STATION_ORDER);
+                renderStationChips();
+                render();
+            });
+            els.stationChips.appendChild(allBtn);
+
+            STATION_ORDER.forEach(id => {
+                if (!stationNames[id]) return;
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'chip' + (selectedStations.has(id) ? ' active' : '');
+                btn.textContent = stationNames[id];
+                btn.addEventListener('click', () => {
+                    if (selectedStations.size === STATION_ORDER.length) {
+                        selectedStations = new Set([id]);
+                    } else if (selectedStations.has(id)) {
+                        selectedStations.delete(id);
+                        if (!selectedStations.size) selectedStations = new Set(STATION_ORDER);
+                    } else {
+                        selectedStations.add(id);
+                    }
+                    renderStationChips();
+                    render();
+                });
+                els.stationChips.appendChild(btn);
+            });
+        }
+
+        function applyFilters(rows) {
+            const q = els.searchInput.value.trim().toLowerCase();
+            const range = els.rangeSelect.value;
+            const now = Date.now();
+            const todayKey = israelTodayKey();
+
+            return rows.filter(row => {
+                if (!selectedStations.has(row.stationId)) return false;
+                if (q) {
+                    const hay = `${row.artist} ${row.title} ${row.raw}`.toLowerCase();
+                    if (!hay.includes(q)) return false;
+                }
+                if (range === '24h' && now - row.ts > 24 * 60 * 60 * 1000) return false;
+                if (range === '7d' && now - row.ts > 7 * 24 * 60 * 60 * 1000) return false;
+                if (range === 'today' && dayKey(row.playedAt) !== todayKey) return false;
+                return true;
+            });
+        }
+
+        function applySort(rows) {
+            const sort = els.sortSelect.value;
+            const sorted = rows.slice();
+            sorted.sort((a, b) => {
+                if (sort === 'oldest') return a.ts - b.ts;
+                if (sort === 'artist') {
+                    return (a.artist || a.title).localeCompare(b.artist || b.title, 'he') || (b.ts - a.ts);
+                }
+                if (sort === 'title') {
+                    return (a.title || '').localeCompare(b.title || '', 'he') || (b.ts - a.ts);
+                }
+                if (sort === 'station') {
+                    return a.stationName.localeCompare(b.stationName) || (b.ts - a.ts);
+                }
+                return b.ts - a.ts;
+            });
+            return sorted;
+        }
+
+        function updateKpis(rows) {
+            els.kpiPlays.textContent = String(rows.length);
+            els.kpiPlaysHint.textContent = rows.length === allRows.length
+                ? 'All logged plays'
+                : `Of ${allRows.length} total logged`;
+
+            const unique = new Set(rows.map(r => `${r.artist}\0${r.title}`.toLowerCase()));
+            els.kpiUnique.textContent = String(unique.size);
+
+            const counts = new Map();
+            rows.forEach(r => counts.set(r.stationName, (counts.get(r.stationName) || 0) + 1));
+            let topName = '—';
+            let topCount = 0;
+            counts.forEach((count, name) => {
+                if (count > topCount) {
+                    topCount = count;
+                    topName = name;
+                }
+            });
+            els.kpiTopStation.textContent = topName;
+            els.kpiTopStationHint.textContent = topCount ? `${topCount} plays in view` : 'No plays in view';
+
+            const withData = STATION_ORDER.filter(id => allRows.some(r => r.stationId === id)).length;
+            els.kpiCoverage.textContent = `${withData}/${STATION_ORDER.length}`;
+            els.kpiCoverageHint.textContent = withData === STATION_ORDER.length
+                ? 'All stations reporting'
+                : 'Stations with at least one play';
+        }
+
+        function renderTable(rows) {
+            if (!rows.length) {
+                els.tableWrap.innerHTML = `
+                    <div class="empty">
+                        <strong>No plays match these filters</strong>
+                        Try widening the date range or clearing the search.
+                    </div>`;
+                return;
             }
 
-            ids.forEach(id => {
-                const station = stations[id];
-                const tab = document.createElement('button');
-                tab.type = 'button';
-                tab.dataset.id = id;
-                tab.textContent = station.name;
-                tab.setAttribute('role', 'tab');
-                tab.addEventListener('click', () => setActiveStation(id));
-                tabsEl.appendChild(tab);
+            const groupByDay = els.groupSelect.value === 'day'
+                && (els.sortSelect.value === 'newest' || els.sortSelect.value === 'oldest');
 
-                const panel = document.createElement('section');
-                panel.className = 'station-panel';
-                panel.dataset.id = id;
-                panel.setAttribute('role', 'tabpanel');
-
-                const heading = document.createElement('h2');
-                heading.textContent = station.name;
-                panel.appendChild(heading);
-
-                const entries = Array.isArray(station.entries) ? station.entries : [];
-                if (!entries.length) {
-                    const empty = document.createElement('div');
-                    empty.className = 'empty-state';
-                    empty.textContent = id === '3'
-                        ? 'No songs logged yet. This station often publishes empty now-playing metadata.'
-                        : 'No songs logged yet. Check back after the monitor has run.';
-                    panel.appendChild(empty);
-                } else {
-                    const groups = groupByDay(entries);
-                    groups.forEach(group => {
-                        const wrap = document.createElement('div');
-                        wrap.className = 'day-group';
-
-                        const label = document.createElement('div');
-                        label.className = 'day-label';
-                        label.textContent = group.label;
-                        wrap.appendChild(label);
-
-                        const list = document.createElement('ul');
-                        list.className = 'play-list';
-                        group.entries.forEach(entry => {
-                            const li = document.createElement('li');
-                            li.innerHTML =
-                                `<span class="play-time">${escapeHtml(formatTime(entry.playedAt))}</span>` +
-                                `<span class="play-song">${songLabel(entry)}</span>`;
-                            list.appendChild(li);
-                        });
-                        wrap.appendChild(list);
-                        panel.appendChild(wrap);
-                    });
+            let body = '';
+            if (!groupByDay) {
+                body = rows.map(rowHtml).join('');
+            } else {
+                let currentDay = '';
+                for (const row of rows) {
+                    const key = dayKey(row.playedAt);
+                    if (key !== currentDay) {
+                        currentDay = key;
+                        body += `<tr class="day-banner"><td colspan="4">${escapeHtml(formatDayLabel(row.playedAt))}</td></tr>`;
+                    }
+                    body += rowHtml(row);
                 }
+            }
 
-                panelsEl.appendChild(panel);
-            });
+            els.tableWrap.innerHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>When</th>
+                            <th>Station</th>
+                            <th>Artist</th>
+                            <th>Title</th>
+                        </tr>
+                    </thead>
+                    <tbody>${body}</tbody>
+                </table>`;
+        }
 
-            setActiveStation(activeStation);
+        function rowHtml(row) {
+            const color = STATION_COLORS[row.stationId] || 'var(--accent)';
+            const when = els.rangeSelect.value === 'today'
+                ? formatTime(row.playedAt)
+                : formatDateTime(row.playedAt);
+            return `
+                <tr>
+                    <td class="col-time">${escapeHtml(when)}</td>
+                    <td class="col-station">
+                        <span class="station-pill">
+                            <span class="station-dot" style="background:${color}"></span>
+                            ${escapeHtml(row.stationName)}
+                        </span>
+                    </td>
+                    <td class="col-artist">${escapeHtml(row.artist || '—')}</td>
+                    <td class="col-title">${escapeHtml(row.title || row.raw || '—')}</td>
+                </tr>`;
+        }
+
+        function render() {
+            const filtered = applySort(applyFilters(allRows));
+            updateKpis(filtered);
+            renderTable(filtered);
+            els.resultsCount.textContent = filtered.length
+                ? `${filtered.length} play${filtered.length === 1 ? '' : 's'}`
+                : 'No plays';
+            const sortLabel = els.sortSelect.selectedOptions[0].textContent;
+            const rangeLabel = els.rangeSelect.selectedOptions[0].textContent;
+            els.resultsSortHint.textContent = `${rangeLabel} · ${sortLabel}`;
         }
 
         async function loadHistory() {
@@ -411,15 +844,28 @@
                 });
                 if (!response.ok) throw new Error('Could not load history.json');
                 const data = await response.json();
-                loadErrorEl.style.display = 'none';
-                render(data);
+                els.updatedAt.textContent = formatUpdatedAt(data.updatedAt);
+                allRows = flattenHistory(data);
+                selectedStations = new Set(STATION_ORDER.filter(id => stationNames[id]));
+                renderStationChips();
+                render();
             } catch (err) {
-                updatedAtEl.textContent = 'History unavailable.';
-                loadErrorEl.style.display = 'block';
-                loadErrorEl.textContent = 'Could not load played-song history. Try refreshing in a moment.';
+                els.updatedAt.textContent = 'History unavailable.';
+                els.tableWrap.innerHTML = `
+                    <div class="error">
+                        <strong>Could not load play history</strong>
+                        Refresh in a moment — the monitor may still be warming up.
+                    </div>`;
                 console.log(err);
             }
         }
+
+        ['input', 'change'].forEach(evt => {
+            els.searchInput.addEventListener(evt, render);
+        });
+        els.rangeSelect.addEventListener('change', render);
+        els.sortSelect.addEventListener('change', render);
+        els.groupSelect.addEventListener('change', render);
 
         loadHistory();
     </script>
