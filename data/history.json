@@ -1,9 +1,30 @@
 {
-  "updatedAt": "2026-08-11T21:06:24.443Z",
+  "updatedAt": "2026-08-11T21:35:51.368Z",
   "stations": {
     "0": {
       "name": "Glgltz",
       "entries": [
+        {
+          "artist": "אסף אמדורסקי",
+          "title": "בראשית",
+          "raw": "אסף אמדורסקי - בראשית",
+          "playedAt": "2026-08-11T21:34:13Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "אסף אמדורסקי",
+          "title": "בראשית",
+          "raw": "אסף אמדורסקי - בראשית",
+          "playedAt": "2026-08-11T21:34:10Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "Beck",
+          "title": "Ride Lonesome",
+          "raw": "Beck - Ride Lonesome",
+          "playedAt": "2026-08-11T21:29:53Z",
+          "source": "liveSchedule"
+        },
         {
           "artist": "נינט טייב",
           "title": "היא יודעת",
@@ -38,6 +59,20 @@
       "name": "Eco",
       "entries": [
         {
+          "artist": "Aviv Geffen",
+          "title": "Sof Ha'Olam",
+          "raw": "Aviv Geffen - Sof Ha'Olam",
+          "playedAt": "2026-08-11T21:35:49.624Z",
+          "source": "ecoFirestore"
+        },
+        {
+          "artist": "Joni Mitchell",
+          "title": "California",
+          "raw": "Joni Mitchell - California",
+          "playedAt": "2026-08-11T21:31:37.997Z",
+          "source": "ecoFirestore"
+        },
+        {
           "artist": "Tame Impala",
           "title": "Feels Like We Only Go Backwards",
           "raw": "Tame Impala - Feels Like We Only Go Backwards",
@@ -56,6 +91,20 @@
     "2": {
       "name": "88FM",
       "entries": [
+        {
+          "artist": "Talking Heads",
+          "title": "Moon Rocks - 2005 Remastered Version",
+          "raw": "Talking Heads - Moon Rocks - 2005 Remastered Version",
+          "playedAt": "2026-08-11T21:32:41.586Z",
+          "source": "kanAcr"
+        },
+        {
+          "artist": "Talking Heads",
+          "title": "Swamp - 2005 Remastered Version",
+          "raw": "Talking Heads - Swamp - 2005 Remastered Version",
+          "playedAt": "2026-08-11T21:31:39.763Z",
+          "source": "kanAcr"
+        },
         {
           "artist": "Talking Heads",
           "title": "Making Flippy Floppy - 2003 Remaster",
