@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-12T06:16:35.874Z",
+  "updatedAt": "2026-08-12T06:33:37.223Z",
   "stations": {
     "0": {
       "name": "Glgltz",
@@ -248,6 +248,13 @@
       "name": "Eco",
       "entries": [
         {
+          "artist": "ברי סחרוף;מיכה שטרית;מיכה שטרית, ברי סחרוף",
+          "title": "סוף הקיץ",
+          "raw": "ברי סחרוף;מיכה שטרית;מיכה שטרית, ברי סחרוף - סוף הקיץ",
+          "playedAt": "2026-08-12T06:33:36.874Z",
+          "source": "ecoFirestore"
+        },
+        {
           "artist": "IDIOT!",
           "title": "חלמתי על אמריקה",
           "raw": "IDIOT! - חלמתי על אמריקה",
@@ -350,6 +357,13 @@
     "2": {
       "name": "88FM",
       "entries": [
+        {
+          "artist": "Shai Tsabari",
+          "title": "Lavi Oti",
+          "raw": "Shai Tsabari - Lavi Oti",
+          "playedAt": "2026-08-12T06:33:36.981Z",
+          "source": "kanAcr"
+        },
         {
           "artist": "Anderson .Paak, ScHoolboy Q",
           "title": "Am I Wrong (feat. ScHoolboy Q)",
