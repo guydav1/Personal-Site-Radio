@@ -1,9 +1,44 @@
 {
-  "updatedAt": "2026-08-12T03:15:46.377Z",
+  "updatedAt": "2026-08-12T05:03:44.143Z",
   "stations": {
     "0": {
       "name": "Glgltz",
       "entries": [
+        {
+          "artist": "",
+          "title": "קצרצרון פותח חדש",
+          "raw": "קצרצרון פותח חדש",
+          "playedAt": "2026-08-12T05:00:06Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "",
+          "title": "גלגלצ בשיתוף הרשות",
+          "raw": "גלגלצ בשיתוף הרשות",
+          "playedAt": "2026-08-12T04:59:56Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "",
+          "title": "חסות תחזית לאומי מקס מאי 23",
+          "raw": "חסות תחזית לאומי מקס מאי 23",
+          "playedAt": "2026-08-12T04:59:56Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "",
+          "title": "KSP מקבוק יולי 26",
+          "raw": "KSP מקבוק יולי 26",
+          "playedAt": "2026-08-12T04:58:01Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "",
+          "title": "קצרצרון פותח חדש",
+          "raw": "קצרצרון פותח חדש",
+          "playedAt": "2026-08-12T04:57:59Z",
+          "source": "liveSchedule"
+        },
         {
           "artist": "מרגלית צנעני",
           "title": "חומות חימר",
@@ -301,6 +336,20 @@
     "2": {
       "name": "88FM",
       "entries": [
+        {
+          "artist": "Alon Oleartchik",
+          "title": "היא הולכת בדרכים",
+          "raw": "Alon Oleartchik - היא הולכת בדרכים",
+          "playedAt": "2026-08-12T05:02:39.109Z",
+          "source": "kanAcr"
+        },
+        {
+          "artist": "The Cardigans",
+          "title": "Carnival",
+          "raw": "The Cardigans - Carnival",
+          "playedAt": "2026-08-12T04:59:30.513Z",
+          "source": "kanAcr"
+        },
         {
           "artist": "Keren Ann",
           "title": "Not Going Anywhere",
