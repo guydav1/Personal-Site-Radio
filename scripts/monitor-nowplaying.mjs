@@ -93,18 +93,21 @@ async function fetchJson(url, { headers = {}, timeoutMs = 25000 } = {}) {
 }
 
 async function fetchViaJina(url, extraHeaders = {}) {
+    const engine = extraHeaders['X-Engine'] || 'curl';
     const proxyUrl = 'https://r.jina.ai/' + url;
     const response = await fetch(proxyUrl, {
         headers: {
             Accept: 'text/plain',
-            'X-Engine': 'curl',
+            'X-Engine': engine,
             'X-Respond-With': 'text',
-            'X-Timeout': '25',
+            'X-Timeout': engine === 'browser' ? '40' : '25',
             ...extraHeaders
         }
     });
-    if (!response.ok) throw new Error(`jina HTTP ${response.status} for ${url}`);
-    return extractJsonObject(await response.text());
+    if (!response.ok) throw new Error(`jina HTTP ${response.status} (${engine}) for ${url}`);
+    const data = extractJsonObject(await response.text());
+    if (!data) throw new Error(`jina empty JSON (${engine}) for ${url}`);
+    return data;
 }
 
 async function fetchJsonWithFallback(url, options = {}) {
@@ -114,7 +117,24 @@ async function fetchJsonWithFallback(url, options = {}) {
     } catch (err) {
         console.warn('direct fetch failed:', err.message || err);
     }
-    return fetchViaJina(url, options.jinaHeaders || {});
+
+    const engines = options.jinaEngines || ['browser', 'browser', 'curl'];
+    let lastError = null;
+    for (const engine of engines) {
+        try {
+            return await fetchViaJina(url, {
+                ...(options.jinaHeaders || {}),
+                'X-Engine': engine
+            });
+        } catch (err) {
+            lastError = err;
+            console.warn(`jina ${engine} failed:`, err.message || err);
+            if (/jina HTTP 429/.test(String(err && err.message))) {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+        }
+    }
+    throw lastError || new Error(`All fetches failed for ${url}`);
 }
 
 function firestoreString(fields, key) {
@@ -205,7 +225,15 @@ function isGlzSongSegment(seg) {
 
 async function collectGlzCurrent(rootId) {
     const url = `https://glz.co.il/umbraco/api/playerv2/LiveSchedule?rootId=${encodeURIComponent(rootId)}`;
-    const data = await fetchJsonWithFallback(url);
+    const data = await fetchJsonWithFallback(url, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+            Referer: 'https://glz.co.il/',
+            Origin: 'https://glz.co.il',
+            Accept: 'application/json,text/plain,*/*'
+        },
+        jinaEngines: ['browser', 'browser', 'curl']
+    });
     const seg = pickCurrentGlzSegment(data);
     if (!isGlzSongSegment(seg)) return [];
     const title = String(seg.title || seg.Title || '').trim();

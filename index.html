@@ -922,14 +922,61 @@
             return parseStreamTitle(`${artist} - ${title}`);
         }
 
+        async function songFromGlzPayload(data, label) {
+            if (!data || !Array.isArray(data.segments)) {
+                throw new Error(`${label} missing segments`);
+            }
+            const song = songFromGlzLiveSchedule(data);
+            if (!song) throw new Error(`${label} no current song`);
+            return song;
+        }
+
+        async function fetchGlzViaJina(url, engine) {
+            const proxy = await fetch('https://r.jina.ai/' + url, {
+                headers: {
+                    Accept: 'text/plain',
+                    'X-Engine': engine,
+                    'X-Respond-With': 'text',
+                    'X-Timeout': engine === 'browser' ? '40' : '25'
+                }
+            });
+            const text = await proxy.text();
+            if (!proxy.ok) throw new Error(`GLZ jina ${engine} HTTP ${proxy.status}`);
+            if (/RateLimitTriggeredError|Per IP rate limit/i.test(text)) {
+                throw new Error(`GLZ jina ${engine} rate limited`);
+            }
+            const data = extractJsonObject(text);
+            if (!data) throw new Error(`GLZ jina ${engine} empty`);
+            return songFromGlzPayload(data, `GLZ jina ${engine}`);
+        }
+
+        async function fetchGlzViaAllOrigins(url) {
+            const proxy = await fetch(
+                'https://api.allorigins.win/raw?url=' + encodeURIComponent(url)
+            );
+            const text = await proxy.text();
+            if (!proxy.ok) throw new Error(`GLZ allorigins HTTP ${proxy.status}`);
+            if (/incapsula|NOINDEX,\s*NOFOLLOW/i.test(text)) {
+                throw new Error('GLZ allorigins blocked');
+            }
+            const data = extractJsonObject(text);
+            if (!data) throw new Error('GLZ allorigins empty');
+            return songFromGlzPayload(data, 'GLZ allorigins');
+        }
+
         async function fetchGlzNowPlaying(rootId) {
-            // GlglzNowPlaying was removed (404). Site player now uses LiveSchedule.
+            // GlglzNowPlaying was removed (404). LiveSchedule is the source; Imperva
+            // blocks browsers/datacenters, and jina curl is often rate-limited — try
+            // browser engine first.
             const id = rootId || 1920;
             const url = `https://glz.co.il/umbraco/api/playerv2/LiveSchedule?rootId=${encodeURIComponent(id)}`;
 
             try {
                 const response = await fetch(url, {
-                    headers: { Accept: 'application/json' }
+                    headers: {
+                        Accept: 'application/json',
+                        Referer: 'https://glz.co.il/'
+                    }
                 });
                 if (response.ok) {
                     const type = (response.headers.get('content-type') || '').toLowerCase();
@@ -942,19 +989,21 @@
                 // Imperva often challenges cross-origin callers; fall through to proxy.
             }
 
-            const proxy = await fetch('https://r.jina.ai/' + url, {
-                headers: {
-                    Accept: 'text/plain',
-                    'X-Engine': 'curl',
-                    'X-Respond-With': 'text',
-                    'X-Timeout': '20'
+            // Browser IPs: try fast curl first, then browser engine (survives Imperva).
+            let lastError = null;
+            for (const engine of ['curl', 'browser', 'browser']) {
+                try {
+                    return await fetchGlzViaJina(url, engine);
+                } catch (err) {
+                    lastError = err;
                 }
-            });
-            if (!proxy.ok) throw new Error('GLZ now-playing failed');
-            const data = extractJsonObject(await proxy.text());
-            const song = songFromGlzLiveSchedule(data);
-            if (!song) throw new Error('GLZ now-playing empty');
-            return song;
+            }
+            try {
+                return await fetchGlzViaAllOrigins(url);
+            } catch (err) {
+                lastError = err;
+            }
+            throw lastError || new Error('GLZ now-playing failed');
         }
 
         async function fetchOfficialSong(channel) {

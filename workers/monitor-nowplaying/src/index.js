@@ -95,28 +95,88 @@ async function fetchJson(url, { headers = {}, timeoutMs = 25000 } = {}) {
 }
 
 async function fetchViaJina(url, extraHeaders = {}) {
+    const engine = extraHeaders['X-Engine'] || 'curl';
+    const headers = {
+        Accept: 'text/plain',
+        'X-Engine': engine,
+        'X-Respond-With': 'text',
+        'X-Timeout': engine === 'browser' ? '40' : '25'
+    };
+    // Only forward non-engine overrides (avoid clobbering Accept / timeout).
+    for (const [key, value] of Object.entries(extraHeaders || {})) {
+        if (key === 'X-Engine') continue;
+        headers[key] = value;
+    }
     const proxyUrl = 'https://r.jina.ai/' + url;
+    const response = await fetch(proxyUrl, { headers });
+    const text = await response.text();
+    if (!response.ok) {
+        throw new Error(`jina HTTP ${response.status} (${engine}) for ${url}`);
+    }
+    if (/RateLimitTriggeredError|Per IP rate limit/i.test(text)) {
+        throw new Error(`jina HTTP 429 (${engine}) for ${url}`);
+    }
+    const data = extractJsonObject(text);
+    if (!data) throw new Error(`jina empty JSON (${engine}) for ${url}`);
+    return data;
+}
+
+async function fetchViaAllOrigins(url) {
+    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
     const response = await fetch(proxyUrl, {
-        headers: {
-            Accept: 'text/plain',
-            'X-Engine': 'curl',
-            'X-Respond-With': 'text',
-            'X-Timeout': '25',
-            ...extraHeaders
-        }
+        headers: { Accept: 'application/json,text/plain,*/*' }
     });
-    if (!response.ok) throw new Error(`jina HTTP ${response.status} for ${url}`);
-    return extractJsonObject(await response.text());
+    const text = await response.text();
+    if (!response.ok) throw new Error(`allorigins HTTP ${response.status}`);
+    if (/incapsula|NOINDEX,\s*NOFOLLOW/i.test(text)) {
+        throw new Error('allorigins got Imperva HTML');
+    }
+    const data = extractJsonObject(text);
+    if (!data) throw new Error('allorigins empty JSON');
+    return data;
 }
 
 async function fetchJsonWithFallback(url, options = {}) {
     try {
         const data = await fetchJson(url, options);
-        if (data) return data;
+        // Imperva sometimes returns 200 HTML; never accept non-schedule payloads.
+        if (data && (Array.isArray(data.segments) || data.serverNowUtc || data.fields || data.title || data.nowplaying)) {
+            return data;
+        }
     } catch (err) {
         console.warn('direct fetch failed:', err.message || err);
     }
-    return fetchViaJina(url, options.jinaHeaders || {});
+
+    // Cloudflare IPs are often curl-rate-limited on jina; browser works but can 429 under burst.
+    const engines = options.jinaEngines || ['browser', 'browser', 'curl'];
+    let lastError = null;
+    const errors = [];
+    for (const engine of engines) {
+        try {
+            return await fetchViaJina(url, {
+                ...(options.jinaHeaders || {}),
+                'X-Engine': engine
+            });
+        } catch (err) {
+            lastError = err;
+            errors.push(String(err && err.message ? err.message : err));
+            console.warn(`jina ${engine} failed:`, err.message || err);
+            if (/jina HTTP 429/.test(String(err && err.message))) {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+        }
+    }
+
+    if (options.tryAllOrigins) {
+        try {
+            return await fetchViaAllOrigins(url);
+        } catch (err) {
+            lastError = err;
+            errors.push(String(err && err.message ? err.message : err));
+        }
+    }
+
+    throw lastError || new Error(`All fetches failed for ${url}: ${errors.join(' | ')}`);
 }
 
 function firestoreString(fields, key) {
@@ -212,7 +272,17 @@ function isGlzSongSegment(seg) {
 
 async function collectGlzCurrent(rootId) {
     const url = `https://glz.co.il/umbraco/api/playerv2/LiveSchedule?rootId=${encodeURIComponent(rootId)}`;
-    const data = await fetchJsonWithFallback(url);
+    // Imperva blocks most datacenter IPs; jina curl is often 429'd — prefer browser engine.
+    const data = await fetchJsonWithFallback(url, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+            Referer: 'https://glz.co.il/',
+            Origin: 'https://glz.co.il',
+            Accept: 'application/json,text/plain,*/*'
+        },
+        jinaEngines: ['browser', 'browser', 'curl'],
+        tryAllOrigins: true
+    });
     const seg = pickCurrentGlzSegment(data);
     if (!isGlzSongSegment(seg)) return [];
     const title = String(seg.title || seg.Title || '').trim();
