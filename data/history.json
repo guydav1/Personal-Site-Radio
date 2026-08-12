@@ -1,9 +1,37 @@
 {
-  "updatedAt": "2026-08-12T00:49:03.341Z",
+  "updatedAt": "2026-08-12T03:15:46.377Z",
   "stations": {
     "0": {
       "name": "Glgltz",
       "entries": [
+        {
+          "artist": "מרגלית צנעני",
+          "title": "חומות חימר",
+          "raw": "מרגלית צנעני - חומות חימר",
+          "playedAt": "2026-08-12T03:17:01Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "רביד פלוטניק",
+          "title": "כל הזמן הזה",
+          "raw": "רביד פלוטניק - כל הזמן הזה",
+          "playedAt": "2026-08-12T03:12:51Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "רביד פלוטניק",
+          "title": "כל הזמן הזה",
+          "raw": "רביד פלוטניק - כל הזמן הזה",
+          "playedAt": "2026-08-12T03:12:47Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "Zusha",
+          "title": "Don’t Leave Me On My Own",
+          "raw": "Zusha - Don’t Leave Me On My Own",
+          "playedAt": "2026-08-12T03:09:43Z",
+          "source": "liveSchedule"
+        },
         {
           "artist": "Miley Cyrus",
           "title": "Midnight Sky",
@@ -171,6 +199,20 @@
       "name": "Eco",
       "entries": [
         {
+          "artist": "IDIOT!",
+          "title": "חלמתי על אמריקה",
+          "raw": "IDIOT! - חלמתי על אמריקה",
+          "playedAt": "2026-08-12T03:12:36.393Z",
+          "source": "ecoFirestore"
+        },
+        {
+          "artist": "אסף אמדורסקי",
+          "title": "השמיים הכחולים",
+          "raw": "אסף אמדורסקי - השמיים הכחולים",
+          "playedAt": "2026-08-12T03:11:34.311Z",
+          "source": "ecoFirestore"
+        },
+        {
           "artist": "Plain White T's",
           "title": "Hey There Delilah",
           "raw": "Plain White T's - Hey There Delilah",
@@ -259,6 +301,20 @@
     "2": {
       "name": "88FM",
       "entries": [
+        {
+          "artist": "Keren Ann",
+          "title": "Not Going Anywhere",
+          "raw": "Keren Ann - Not Going Anywhere",
+          "playedAt": "2026-08-12T03:12:36.625Z",
+          "source": "kanAcr"
+        },
+        {
+          "artist": "Joni Mitchell",
+          "title": "A Case Of You",
+          "raw": "Joni Mitchell - A Case Of You",
+          "playedAt": "2026-08-12T03:11:34.613Z",
+          "source": "kanAcr"
+        },
         {
           "artist": "David Broza",
           "title": "היונה הלבנה כבר זקנה",
