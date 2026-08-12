@@ -1,0 +1,24 @@
+# Cloudflare Worker: poll station now-playing every minute and commit data/history.json.
+#
+# One-time setup:
+# 1. Create a free Cloudflare account: https://dash.cloudflare.com/sign-up
+# 2. Create a GitHub fine-grained PAT with Contents: Read and write on guydav1/Personal-Site-Radio only
+#    https://github.com/settings/personal-access-tokens/new
+# 3. From this directory:
+#      npx wrangler@latest login
+#      npx wrangler@latest secret put GITHUB_TOKEN
+#      npx wrangler@latest deploy
+# 4. Confirm under Workers → this worker → Triggers / Logs that cron fires each minute.
+# 5. Optional manual run after deploy: open the worker URL in a browser (GET / runs one poll).
+
+name = "radio-monitor-nowplaying"
+main = "src/index.js"
+compatibility_date = "2026-03-01"
+
+[vars]
+GITHUB_REPO = "guydav1/Personal-Site-Radio"
+GITHUB_BRANCH = "main"
+HISTORY_PATH = "data/history.json"
+
+[triggers]
+crons = ["* * * * *"]

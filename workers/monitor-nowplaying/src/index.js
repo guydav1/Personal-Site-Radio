@@ -1,15 +1,9 @@
 /**
- * Local / one-shot station now-playing monitor.
- * Production schedule runs on Cloudflare Worker: workers/monitor-nowplaying/
- * Polls official NP feeds, merges into data/history.json, and exits.
+ * Cloudflare Worker now-playing monitor.
+ * Cron: every minute. Also runs on GET / for a manual trigger.
+ * Merges station NP feeds into data/history.json via the GitHub Contents API.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const HISTORY_PATH = join(ROOT, 'data', 'history.json');
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_ENTRIES_PER_STATION = 500;
 
@@ -63,6 +57,24 @@ function extractJsonObject(text) {
     }
 }
 
+function encodeBase64(text) {
+    const bytes = new TextEncoder().encode(text);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 1) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+}
+
+function decodeBase64(b64) {
+    const binary = atob(String(b64 || '').replace(/\n/g, ''));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return new TextDecoder().decode(bytes);
+}
+
 async function fetchJson(url, { headers = {}, timeoutMs = 25000 } = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -83,7 +95,6 @@ async function fetchJson(url, { headers = {}, timeoutMs = 25000 } = {}) {
                 return extractJsonObject(text);
             }
         }
-        // Imperva / HTML challenge pages are not usable JSON.
         if (/incapsula|NOINDEX,\s*NOFOLLOW/i.test(text)) {
             throw new Error(`Blocked/HTML response for ${url}`);
         }
@@ -124,24 +135,28 @@ function firestoreString(fields, key) {
         : '';
 }
 
-function loadHistory() {
-    if (!existsSync(HISTORY_PATH)) {
-        return {
-            updatedAt: null,
-            stations: Object.fromEntries(
-                STATIONS.map(s => [s.id, { name: s.name, entries: [] }])
-            )
-        };
+function emptyHistory() {
+    return {
+        updatedAt: null,
+        stations: Object.fromEntries(
+            STATIONS.map(s => [s.id, { name: s.name, entries: [] }])
+        )
+    };
+}
+
+function normalizeHistory(data) {
+    const history = data && typeof data === 'object' ? data : emptyHistory();
+    if (!history.stations || typeof history.stations !== 'object') {
+        history.stations = {};
     }
-    const data = JSON.parse(readFileSync(HISTORY_PATH, 'utf8'));
     for (const station of STATIONS) {
-        if (!data.stations[station.id]) {
-            data.stations[station.id] = { name: station.name, entries: [] };
+        if (!history.stations[station.id]) {
+            history.stations[station.id] = { name: station.name, entries: [] };
         }
-        data.stations[station.id].name = station.name;
-        data.stations[station.id].entries = data.stations[station.id].entries || [];
+        history.stations[station.id].name = station.name;
+        history.stations[station.id].entries = history.stations[station.id].entries || [];
     }
-    return data;
+    return history;
 }
 
 function pruneStationEntries(entries) {
@@ -269,8 +284,6 @@ async function collectForStation(station) {
 }
 
 function shouldAppendSnapshot(existingEntries, incoming) {
-    // For non-schedule feeds: only keep a new row when the song itself changed
-    // (ignore minute-by-minute re-polls of the same track).
     if (!incoming.length) return [];
     const latest = existingEntries[0];
     return incoming.filter(entry => {
@@ -279,8 +292,59 @@ function shouldAppendSnapshot(existingEntries, incoming) {
     });
 }
 
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+function ghHeaders(token) {
+    return {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'User-Agent': 'radio-monitor-nowplaying',
+        'X-GitHub-Api-Version': '2022-11-28'
+    };
+}
+
+async function loadHistoryFromGitHub(env) {
+    const path = env.HISTORY_PATH || 'data/history.json';
+    const url = `https://api.github.com/repos/${env.GITHUB_REPO}/contents/${path}?ref=${encodeURIComponent(env.GITHUB_BRANCH || 'main')}`;
+    const response = await fetch(url, { headers: ghHeaders(env.GITHUB_TOKEN) });
+    if (response.status === 404) {
+        return { history: emptyHistory(), sha: null, previousText: null };
+    }
+    if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`GitHub GET ${response.status}: ${body.slice(0, 300)}`);
+    }
+    const payload = await response.json();
+    const text = decodeBase64(payload.content);
+    return {
+        history: normalizeHistory(JSON.parse(text)),
+        sha: payload.sha,
+        previousText: text
+    };
+}
+
+async function commitHistoryToGitHub(env, history, sha) {
+    const path = env.HISTORY_PATH || 'data/history.json';
+    const text = JSON.stringify(history, null, 2) + '\n';
+    const url = `https://api.github.com/repos/${env.GITHUB_REPO}/contents/${path}`;
+    const body = {
+        message: 'Update song history from now-playing monitor.',
+        content: encodeBase64(text),
+        branch: env.GITHUB_BRANCH || 'main'
+    };
+    if (sha) body.sha = sha;
+
+    const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+            ...ghHeaders(env.GITHUB_TOKEN),
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+    if (!response.ok) {
+        const errBody = await response.text();
+        throw new Error(`GitHub PUT ${response.status}: ${errBody.slice(0, 400)}`);
+    }
+    return text;
 }
 
 async function pollOnce(history) {
@@ -308,37 +372,61 @@ async function pollOnce(history) {
 
     if (changed) {
         history.updatedAt = new Date().toISOString();
-        mkdirSync(dirname(HISTORY_PATH), { recursive: true });
-        writeFileSync(HISTORY_PATH, JSON.stringify(history, null, 2) + '\n', 'utf8');
+    }
+
+    return { changed, summary, history };
+}
+
+async function runMonitor(env) {
+    if (!env.GITHUB_TOKEN) {
+        throw new Error('Missing GITHUB_TOKEN secret');
+    }
+    if (!env.GITHUB_REPO) {
+        throw new Error('Missing GITHUB_REPO var');
+    }
+
+    const { history, sha, previousText } = await loadHistoryFromGitHub(env);
+    const { changed, summary, history: next } = await pollOnce(history);
+    const nextText = JSON.stringify(next, null, 2) + '\n';
+    const contentChanged = changed && nextText !== previousText;
+
+    if (contentChanged) {
+        await commitHistoryToGitHub(env, next, sha);
         console.log('history updated');
     } else {
         console.log('history unchanged');
     }
     console.log(summary.join(' | '));
-    return changed;
+
+    return {
+        committed: contentChanged,
+        updatedAt: next.updatedAt,
+        summary
+    };
 }
 
-async function main() {
-    // GitHub Actions won't honor cron denser than ~5 minutes. In CI we loop inside
-    // one job so we still sample about once a minute between scheduled starts.
-    const durationMs = Math.max(0, Number(process.env.MONITOR_DURATION_MS || 0) || 0);
-    const intervalMs = Math.max(15000, Number(process.env.MONITOR_INTERVAL_MS || 60000) || 60000);
-    const history = loadHistory();
-    const started = Date.now();
-    let pass = 0;
+export default {
+    async scheduled(controller, env) {
+        await runMonitor(env);
+    },
 
-    do {
-        pass += 1;
-        console.log(`poll pass ${pass}`);
-        await pollOnce(history);
-        if (!durationMs) break;
-        const elapsed = Date.now() - started;
-        if (elapsed + intervalMs >= durationMs) break;
-        await sleep(intervalMs);
-    } while (Date.now() - started < durationMs);
-}
-
-main().catch(err => {
-    console.error(err);
-    process.exit(1);
-});
+    async fetch(request, env) {
+        const url = new URL(request.url);
+        if (url.pathname !== '/' && url.pathname !== '/run') {
+            return new Response('Not found', { status: 404 });
+        }
+        try {
+            const result = await runMonitor(env);
+            return Response.json({
+                ok: true,
+                ...result
+            });
+        } catch (err) {
+            console.error(err);
+            return Response.json(
+                { ok: false, error: String(err && err.message ? err.message : err) },
+                { status: 500 }
+            );
+        }
+    }
+};
