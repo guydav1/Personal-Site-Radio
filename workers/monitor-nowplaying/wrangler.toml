@@ -1,24 +1,25 @@
-# Cloudflare Worker: poll station now-playing every minute and commit data/history.json.
+# Cloudflare Worker: poll station now-playing every minute into KV.
+# History is served at GET /history.json (no GitHub commits / Pages rebuilds).
 #
-# One-time setup:
-# 1. Create a free Cloudflare account: https://dash.cloudflare.com/sign-up
-# 2. Create a GitHub fine-grained PAT with Contents: Read and write on guydav1/Personal-Site-Radio only
-#    https://github.com/settings/personal-access-tokens/new
-# 3. From this directory:
-#      npx wrangler@latest login
-#      npx wrangler@latest secret put GITHUB_TOKEN
-#      npx wrangler@latest deploy
-# 4. Confirm under Workers → this worker → Triggers / Logs that cron fires each minute.
-# 5. Optional manual run after deploy: open the worker URL in a browser (GET / runs one poll).
+# Deploy:
+#   npx wrangler@latest deploy
+# Optional one-time seed from local file (if KV is empty the Worker also seeds from HISTORY_SEED_URL):
+#   npx wrangler@latest kv key put history --path=../../data/history.json --binding=HISTORY --remote
+#
+# Manual poll: GET / or GET /run
+# Public history: GET /history.json
 
 name = "radio-monitor-nowplaying"
 main = "src/index.js"
 compatibility_date = "2026-03-01"
 
 [vars]
-GITHUB_REPO = "guydav1/Personal-Site-Radio"
-GITHUB_BRANCH = "main"
-HISTORY_PATH = "data/history.json"
+HISTORY_KEY = "history"
+HISTORY_SEED_URL = "https://raw.githubusercontent.com/guydav1/Personal-Site-Radio/main/data/history.json"
+
+[[kv_namespaces]]
+binding = "HISTORY"
+id = "57dee50f4d064d168a8d563d66a40039"
 
 [triggers]
 crons = ["* * * * *"]

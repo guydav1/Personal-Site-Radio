@@ -1,7 +1,6 @@
 /**
- * Local / one-shot station now-playing monitor.
- * Production schedule runs on Cloudflare Worker: workers/monitor-nowplaying/
- * Polls official NP feeds, merges into data/history.json, and exits.
+ * Local / one-shot station now-playing monitor (writes data/history.json on disk).
+ * Production: Cloudflare Worker + KV — workers/monitor-nowplaying/
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';

@@ -1,7 +1,8 @@
 /**
  * Cloudflare Worker now-playing monitor.
- * Cron: every minute. Also runs on GET / for a manual trigger.
- * Merges station NP feeds into data/history.json via the GitHub Contents API.
+ * Cron: every minute → merge station NP into KV.
+ * GET /history.json → public history for the site (CORS enabled).
+ * GET / or /run → manual poll.
  */
 
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -13,6 +14,13 @@ const STATIONS = [
     { id: '2', name: '88FM', type: 'kanAcr', channelId: 4 },
     { id: '3', name: '106FM', type: 'ecastPlayerInfo', url: 'https://live.ecast.co.il/AudioPlayer/galimlive/playerInfo' }
 ];
+
+const CORS_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Accept, Content-Type',
+    'Access-Control-Max-Age': '86400'
+};
 
 function normalizeKey(value) {
     return String(value || '')
@@ -55,24 +63,6 @@ function extractJsonObject(text) {
     } catch {
         return null;
     }
-}
-
-function encodeBase64(text) {
-    const bytes = new TextEncoder().encode(text);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i += 1) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
-}
-
-function decodeBase64(b64) {
-    const binary = atob(String(b64 || '').replace(/\n/g, ''));
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) {
-        bytes[i] = binary.charCodeAt(i);
-    }
-    return new TextDecoder().decode(bytes);
 }
 
 async function fetchJson(url, { headers = {}, timeoutMs = 25000 } = {}) {
@@ -292,58 +282,49 @@ function shouldAppendSnapshot(existingEntries, incoming) {
     });
 }
 
-function ghHeaders(token) {
-    return {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${token}`,
-        'User-Agent': 'radio-monitor-nowplaying',
-        'X-GitHub-Api-Version': '2022-11-28'
-    };
+function historyKey(env) {
+    return env.HISTORY_KEY || 'history';
 }
 
-async function loadHistoryFromGitHub(env) {
-    const path = env.HISTORY_PATH || 'data/history.json';
-    const url = `https://api.github.com/repos/${env.GITHUB_REPO}/contents/${path}?ref=${encodeURIComponent(env.GITHUB_BRANCH || 'main')}`;
-    const response = await fetch(url, { headers: ghHeaders(env.GITHUB_TOKEN) });
-    if (response.status === 404) {
-        return { history: emptyHistory(), sha: null, previousText: null };
+async function seedHistoryFromUrl(env) {
+    const seedUrl = env.HISTORY_SEED_URL;
+    if (!seedUrl) return emptyHistory();
+    try {
+        const response = await fetch(seedUrl, {
+            headers: { Accept: 'application/json' }
+        });
+        if (!response.ok) {
+            console.warn('seed fetch failed:', response.status);
+            return emptyHistory();
+        }
+        return normalizeHistory(await response.json());
+    } catch (err) {
+        console.warn('seed fetch error:', err.message || err);
+        return emptyHistory();
     }
-    if (!response.ok) {
-        const body = await response.text();
-        throw new Error(`GitHub GET ${response.status}: ${body.slice(0, 300)}`);
-    }
-    const payload = await response.json();
-    const text = decodeBase64(payload.content);
-    return {
-        history: normalizeHistory(JSON.parse(text)),
-        sha: payload.sha,
-        previousText: text
-    };
 }
 
-async function commitHistoryToGitHub(env, history, sha) {
-    const path = env.HISTORY_PATH || 'data/history.json';
+async function loadHistory(env) {
+    if (!env.HISTORY) {
+        throw new Error('Missing HISTORY KV binding');
+    }
+    const raw = await env.HISTORY.get(historyKey(env));
+    if (raw) {
+        try {
+            return { history: normalizeHistory(JSON.parse(raw)), previousText: raw };
+        } catch {
+            console.warn('corrupt KV history; reseeding');
+        }
+    }
+    const seeded = await seedHistoryFromUrl(env);
+    const text = JSON.stringify(seeded, null, 2) + '\n';
+    await env.HISTORY.put(historyKey(env), text);
+    return { history: seeded, previousText: text };
+}
+
+async function saveHistory(env, history) {
     const text = JSON.stringify(history, null, 2) + '\n';
-    const url = `https://api.github.com/repos/${env.GITHUB_REPO}/contents/${path}`;
-    const body = {
-        message: 'Update song history from now-playing monitor.',
-        content: encodeBase64(text),
-        branch: env.GITHUB_BRANCH || 'main'
-    };
-    if (sha) body.sha = sha;
-
-    const response = await fetch(url, {
-        method: 'PUT',
-        headers: {
-            ...ghHeaders(env.GITHUB_TOKEN),
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body)
-    });
-    if (!response.ok) {
-        const errBody = await response.text();
-        throw new Error(`GitHub PUT ${response.status}: ${errBody.slice(0, 400)}`);
-    }
+    await env.HISTORY.put(historyKey(env), text);
     return text;
 }
 
@@ -378,20 +359,13 @@ async function pollOnce(history) {
 }
 
 async function runMonitor(env) {
-    if (!env.GITHUB_TOKEN) {
-        throw new Error('Missing GITHUB_TOKEN secret');
-    }
-    if (!env.GITHUB_REPO) {
-        throw new Error('Missing GITHUB_REPO var');
-    }
-
-    const { history, sha, previousText } = await loadHistoryFromGitHub(env);
+    const { history, previousText } = await loadHistory(env);
     const { changed, summary, history: next } = await pollOnce(history);
     const nextText = JSON.stringify(next, null, 2) + '\n';
     const contentChanged = changed && nextText !== previousText;
 
     if (contentChanged) {
-        await commitHistoryToGitHub(env, next, sha);
+        await saveHistory(env, next);
         console.log('history updated');
     } else {
         console.log('history unchanged');
@@ -399,10 +373,33 @@ async function runMonitor(env) {
     console.log(summary.join(' | '));
 
     return {
-        committed: contentChanged,
+        saved: contentChanged,
         updatedAt: next.updatedAt,
         summary
     };
+}
+
+function jsonResponse(data, status = 200, extraHeaders = {}) {
+    return new Response(JSON.stringify(data), {
+        status,
+        headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            ...CORS_HEADERS,
+            ...extraHeaders
+        }
+    });
+}
+
+async function serveHistory(env) {
+    const { history } = await loadHistory(env);
+    return new Response(JSON.stringify(history), {
+        status: 200,
+        headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'public, max-age=30',
+            ...CORS_HEADERS
+        }
+    });
 }
 
 export default {
@@ -412,21 +409,40 @@ export default {
 
     async fetch(request, env) {
         const url = new URL(request.url);
-        if (url.pathname !== '/' && url.pathname !== '/run') {
-            return new Response('Not found', { status: 404 });
+
+        if (request.method === 'OPTIONS') {
+            return new Response(null, { status: 204, headers: CORS_HEADERS });
         }
-        try {
-            const result = await runMonitor(env);
-            return Response.json({
-                ok: true,
-                ...result
-            });
-        } catch (err) {
-            console.error(err);
-            return Response.json(
-                { ok: false, error: String(err && err.message ? err.message : err) },
-                { status: 500 }
-            );
+
+        if (request.method !== 'GET' && request.method !== 'HEAD') {
+            return jsonResponse({ ok: false, error: 'Method not allowed' }, 405);
         }
+
+        if (url.pathname === '/history.json' || url.pathname === '/history') {
+            try {
+                return await serveHistory(env);
+            } catch (err) {
+                console.error(err);
+                return jsonResponse(
+                    { ok: false, error: String(err && err.message ? err.message : err) },
+                    500
+                );
+            }
+        }
+
+        if (url.pathname === '/' || url.pathname === '/run') {
+            try {
+                const result = await runMonitor(env);
+                return jsonResponse({ ok: true, ...result });
+            } catch (err) {
+                console.error(err);
+                return jsonResponse(
+                    { ok: false, error: String(err && err.message ? err.message : err) },
+                    500
+                );
+            }
+        }
+
+        return jsonResponse({ ok: false, error: 'Not found' }, 404);
     }
 };

@@ -836,13 +836,15 @@
             els.resultsSortHint.textContent = `${rangeLabel} · ${sortLabel}`;
         }
 
+        const HISTORY_URL = 'https://radio-monitor-nowplaying.guydav1.workers.dev/history.json';
+
         async function loadHistory() {
             try {
-                const response = await fetch(`data/history.json?_=${Date.now()}`, {
+                const response = await fetch(`${HISTORY_URL}?_=${Date.now()}`, {
                     headers: { Accept: 'application/json' },
                     cache: 'no-store'
                 });
-                if (!response.ok) throw new Error('Could not load history.json');
+                if (!response.ok) throw new Error('Could not load history');
                 const data = await response.json();
                 els.updatedAt.textContent = formatUpdatedAt(data.updatedAt);
                 allRows = flattenHistory(data);
