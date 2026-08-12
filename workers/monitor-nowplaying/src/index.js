@@ -9,7 +9,7 @@ const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_ENTRIES_PER_STATION = 500;
 
 const STATIONS = [
-    { id: '0', name: 'Glgltz', type: 'glzLiveSchedule', rootId: 1920 },
+    { id: '0', name: 'Glgltz', type: 'glzCurrentSong', rootId: 1920 },
     { id: '1', name: 'Eco', type: 'ecoFirestore' },
     { id: '2', name: '88FM', type: 'kanAcr', channelId: 4 },
     { id: '3', name: '106FM', type: 'ecastPlayerInfo', url: 'https://live.ecast.co.il/AudioPlayer/galimlive/playerInfo' }
@@ -179,26 +179,52 @@ function mergeEntries(existing, incoming) {
     };
 }
 
-async function collectGlzSegments(rootId) {
+function pickCurrentGlzSegment(data) {
+    const segments = Array.isArray(data && data.segments) ? data.segments : [];
+    if (!segments.length) return null;
+    const now = Date.parse((data && data.serverNowUtc) || '') || Date.now();
+    const current = segments.find(seg => {
+        const start = Date.parse(seg.startsUtc || seg.StartsUtc || '');
+        const endRaw = seg.endsUtc ?? seg.EndsUtc;
+        const end = endRaw == null || endRaw === '' ? NaN : Date.parse(endRaw);
+        if (!Number.isFinite(start)) return false;
+        if (Number.isFinite(end)) return start <= now && now < end;
+        return start <= now;
+    });
+    return current || segments[segments.length - 1];
+}
+
+function isGlzSongSegment(seg) {
+    if (!seg || typeof seg !== 'object') return false;
+    const title = String(seg.title || seg.Title || '').trim();
+    const artist = String(seg.desc || seg.Desc || seg.artist || seg.Artist || '').trim();
+    if (!title || !artist) return false;
+    // Ads / promos / show blocks often land in the same feed.
+    const blob = `${artist} ${title}`;
+    if (/מקבוק|פרסומת|תשדיר|מבצע|הלוואה|ביטוח|\bKSP\b|יולי\s*\d+/i.test(blob)) {
+        return false;
+    }
+    if (/עשורים עם|מוזיקה ברצף|לינוי וובה|שנות ה-/i.test(blob)) {
+        return false;
+    }
+    return true;
+}
+
+async function collectGlzCurrent(rootId) {
     const url = `https://glz.co.il/umbraco/api/playerv2/LiveSchedule?rootId=${encodeURIComponent(rootId)}`;
     const data = await fetchJsonWithFallback(url);
-    const segments = Array.isArray(data && data.segments) ? data.segments : [];
-    const now = new Date().toISOString();
-    return segments
-        .map(seg => {
-            const title = String(seg.title || seg.Title || '').trim();
-            const artist = String(seg.desc || seg.Desc || seg.artist || seg.Artist || '').trim();
-            if (!title) return null;
-            const playedAt = seg.startsUtc || seg.StartsUtc || now;
-            return {
-                artist,
-                title,
-                raw: artist ? `${artist} - ${title}` : title,
-                playedAt,
-                source: 'liveSchedule'
-            };
-        })
-        .filter(Boolean);
+    const seg = pickCurrentGlzSegment(data);
+    if (!isGlzSongSegment(seg)) return [];
+    const title = String(seg.title || seg.Title || '').trim();
+    const artist = String(seg.desc || seg.Desc || seg.artist || seg.Artist || '').trim();
+    const playedAt = seg.startsUtc || seg.StartsUtc || new Date().toISOString();
+    return [{
+        artist,
+        title,
+        raw: `${artist} - ${title}`,
+        playedAt,
+        source: 'glzCurrent'
+    }];
 }
 
 async function collectEcoCurrent() {
@@ -260,8 +286,9 @@ async function collectEcastCurrent(url) {
 
 async function collectForStation(station) {
     switch (station.type) {
+        case 'glzCurrentSong':
         case 'glzLiveSchedule':
-            return collectGlzSegments(station.rootId);
+            return collectGlzCurrent(station.rootId);
         case 'ecoFirestore':
             return collectEcoCurrent();
         case 'kanAcr':
@@ -271,6 +298,26 @@ async function collectForStation(station) {
         default:
             return [];
     }
+}
+
+function isKeepableHistoryEntry(entry) {
+    if (!entry || !entry.title) return false;
+    if (!String(entry.artist || '').trim()) return false;
+    const blob = `${entry.artist || ''} ${entry.title || ''} ${entry.raw || ''}`;
+    if (/מקבוק|פרסומת|תשדיר|מבצע|\bKSP\b|יולי\s*\d+/i.test(blob)) return false;
+    if (/עשורים עם|מוזיקה ברצף|לינוי וובה|שנות ה-/i.test(blob)) return false;
+    return true;
+}
+
+function scrubHistory(history) {
+    let changed = false;
+    for (const station of STATIONS) {
+        const bucket = history.stations[station.id];
+        const before = bucket.entries.length;
+        bucket.entries = pruneStationEntries(bucket.entries.filter(isKeepableHistoryEntry));
+        if (bucket.entries.length !== before) changed = true;
+    }
+    return changed;
 }
 
 function shouldAppendSnapshot(existingEntries, incoming) {
@@ -329,16 +376,15 @@ async function saveHistory(env, history) {
 }
 
 async function pollOnce(history) {
-    let changed = false;
+    let changed = scrubHistory(history);
     const summary = [];
 
     for (const station of STATIONS) {
         const bucket = history.stations[station.id];
         try {
             let incoming = await collectForStation(station);
-            if (station.type !== 'glzLiveSchedule') {
-                incoming = shouldAppendSnapshot(bucket.entries, incoming);
-            }
+            // All stations: append only when the playing song changes.
+            incoming = shouldAppendSnapshot(bucket.entries, incoming);
             const { entries, added } = mergeEntries(bucket.entries, incoming);
             if (added > 0 || entries.length !== bucket.entries.length) {
                 changed = true;

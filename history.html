@@ -376,6 +376,70 @@
             letter-spacing: -0.01em;
         }
 
+        .col-actions {
+            width: 6.5rem;
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .row-actions {
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.15rem;
+        }
+
+        button.icon-btn {
+            border: 1px solid transparent;
+            background: transparent;
+            color: var(--muted);
+            width: 2rem;
+            height: 2rem;
+            padding: 0;
+            border-radius: 999px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+        }
+
+        button.icon-btn svg {
+            width: 1rem;
+            height: 1rem;
+            display: block;
+        }
+
+        button.icon-btn:hover:not(:disabled) {
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--line-strong);
+        }
+
+        button.icon-btn:disabled {
+            opacity: 0.3;
+            cursor: default;
+        }
+
+        button.icon-btn.busy {
+            color: var(--accent);
+            border-color: rgba(212, 160, 23, 0.35);
+            background: var(--accent-soft);
+            animation: pulse 1s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            50% { opacity: 0.45; }
+        }
+
+        .action-status {
+            margin: 0.65rem 1rem 0;
+            min-height: 1.1em;
+            font-size: 0.78rem;
+            font-family: var(--mono);
+            color: var(--faint);
+        }
+
         .day-banner td {
             padding: 0.65rem 1rem;
             background: rgba(212, 160, 23, 0.06);
@@ -436,6 +500,7 @@
             .col-station { display: none; }
             thead th:nth-child(2) { display: none; }
             .col-time { width: 4.8rem; }
+            .col-actions { width: 5.2rem; }
             table { font-size: 0.92rem; }
         }
     </style>
@@ -527,15 +592,17 @@
 
         <section class="panel" aria-live="polite">
             <div id="tableWrap"></div>
+            <div class="action-status" id="actionStatus" aria-live="polite"></div>
         </section>
 
         <p class="footer-note">
             History is written about once a minute from public now-playing feeds.
-            Glgltz uses schedule segments; other stations log on song change.
+            Stations log when the current song changes.
             <a href="index.html">Return to live radio</a>
         </p>
     </main>
 
+    <script src="scripts/history-media.js"></script>
     <script>
         const TIME_ZONE = 'Asia/Jerusalem';
         const STATION_ORDER = ['0', '1', '2', '3'];
@@ -554,6 +621,7 @@
             sortSelect: document.getElementById('sortSelect'),
             groupSelect: document.getElementById('groupSelect'),
             tableWrap: document.getElementById('tableWrap'),
+            actionStatus: document.getElementById('actionStatus'),
             resultsCount: document.getElementById('resultsCount'),
             resultsSortHint: document.getElementById('resultsSortHint'),
             kpiPlays: document.getElementById('kpiPlays'),
@@ -646,8 +714,9 @@
                 const station = stations[id];
                 if (!station) return;
                 stationNames[id] = station.name || id;
-                (station.entries || []).forEach(entry => {
+                (station.entries || []).forEach((entry, index) => {
                     rows.push({
+                        id: `${id}-${index}-${entry.playedAt || ''}`,
                         stationId: id,
                         stationName: stationNames[id],
                         artist: entry.artist || '',
@@ -660,6 +729,13 @@
             });
             return rows;
         }
+
+        function canActOnRow(row) {
+            return !!(row && (row.title || row.raw));
+        }
+
+        const DOWNLOAD_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M5 21h14"></path></svg>`;
+        const YOUTUBE_ICON = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31.5 31.5 0 0 0 0 12a31.5 31.5 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31.5 31.5 0 0 0 24 12a31.5 31.5 0 0 0-.5-5.8ZM9.75 15.5v-7l6.5 3.5-6.5 3.5Z"></path></svg>`;
 
         function renderStationChips() {
             els.stationChips.innerHTML = '';
@@ -785,7 +861,7 @@
                     const key = dayKey(row.playedAt);
                     if (key !== currentDay) {
                         currentDay = key;
-                        body += `<tr class="day-banner"><td colspan="4">${escapeHtml(formatDayLabel(row.playedAt))}</td></tr>`;
+                        body += `<tr class="day-banner"><td colspan="5">${escapeHtml(formatDayLabel(row.playedAt))}</td></tr>`;
                     }
                     body += rowHtml(row);
                 }
@@ -799,6 +875,7 @@
                             <th>Station</th>
                             <th>Artist</th>
                             <th>Title</th>
+                            <th class="col-actions">Links</th>
                         </tr>
                     </thead>
                     <tbody>${body}</tbody>
@@ -810,8 +887,14 @@
             const when = els.rangeSelect.value === 'today'
                 ? formatTime(row.playedAt)
                 : formatDateTime(row.playedAt);
+            const disabled = canActOnRow(row) ? '' : ' disabled';
+            const payload = escapeHtml(JSON.stringify({
+                artist: row.artist || '',
+                title: row.title || '',
+                raw: row.raw || row.title || ''
+            }));
             return `
-                <tr>
+                <tr data-row-id="${escapeHtml(row.id)}">
                     <td class="col-time">${escapeHtml(when)}</td>
                     <td class="col-station">
                         <span class="station-pill">
@@ -821,6 +904,12 @@
                     </td>
                     <td class="col-artist">${escapeHtml(row.artist || '—')}</td>
                     <td class="col-title">${escapeHtml(row.title || row.raw || '—')}</td>
+                    <td class="col-actions">
+                        <div class="row-actions">
+                            <button type="button" class="icon-btn" data-action="download" data-song="${payload}" title="Download MP3" aria-label="Download MP3"${disabled}>${DOWNLOAD_ICON}</button>
+                            <button type="button" class="icon-btn" data-action="youtube" data-song="${payload}" title="Open on YouTube" aria-label="Open on YouTube"${disabled}>${YOUTUBE_ICON}</button>
+                        </div>
+                    </td>
                 </tr>`;
         }
 
@@ -868,6 +957,46 @@
         els.rangeSelect.addEventListener('change', render);
         els.sortSelect.addEventListener('change', render);
         els.groupSelect.addEventListener('change', render);
+
+        let actionBusy = false;
+
+        els.tableWrap.addEventListener('click', async (event) => {
+            const btn = event.target.closest('button[data-action]');
+            if (!btn || actionBusy || btn.disabled) return;
+            const action = btn.getAttribute('data-action');
+            let song;
+            try {
+                song = JSON.parse(btn.getAttribute('data-song') || '{}');
+            } catch {
+                return;
+            }
+            if (!canActOnRow(song)) return;
+
+            actionBusy = true;
+            btn.classList.add('busy');
+            btn.disabled = true;
+            try {
+                if (action === 'youtube') {
+                    els.actionStatus.textContent = 'Opening YouTube…';
+                    const video = await HistoryMedia.openYouTube(song);
+                    els.actionStatus.textContent = video ? video.title : 'Opened YouTube search.';
+                } else if (action === 'download') {
+                    await HistoryMedia.downloadMp3(song, text => {
+                        els.actionStatus.textContent = text;
+                    });
+                    els.actionStatus.textContent = 'Download started.';
+                }
+            } catch (err) {
+                els.actionStatus.textContent = action === 'download'
+                    ? 'Download failed — try again.'
+                    : 'Could not open YouTube.';
+                console.log(err);
+            } finally {
+                actionBusy = false;
+                btn.classList.remove('busy');
+                btn.disabled = !canActOnRow(song);
+            }
+        });
 
         loadHistory();
     </script>

@@ -892,15 +892,34 @@
             return parseEcastSongText(await response.text(), type);
         }
 
+        function pickCurrentGlzSegment(data) {
+            const segments = Array.isArray(data && data.segments) ? data.segments : [];
+            if (!segments.length) return null;
+            const now = Date.parse((data && data.serverNowUtc) || '') || Date.now();
+            const current = segments.find(seg => {
+                const start = Date.parse(seg.startsUtc || seg.StartsUtc || '');
+                const endRaw = seg.endsUtc ?? seg.EndsUtc;
+                const end = endRaw == null || endRaw === '' ? NaN : Date.parse(endRaw);
+                if (!Number.isFinite(start)) return false;
+                if (Number.isFinite(end)) return start <= now && now < end;
+                return start <= now;
+            });
+            return current || segments[segments.length - 1];
+        }
+
         function songFromGlzLiveSchedule(data) {
             if (!data) return null;
-            const seg = (Array.isArray(data.segments) && data.segments[0]) || data;
+            const seg = pickCurrentGlzSegment(data) || data;
             if (!seg || typeof seg !== 'object') return null;
             // Live player: title = song, desc = artist (e.g. Maps / Yeah Yeah Yeahs).
             const title = (seg.title || seg.Title || '').trim();
             const artist = (seg.desc || seg.Desc || seg.artist || seg.Artist || '').trim();
-            if (!title) return null;
-            return parseStreamTitle(artist ? `${artist} - ${title}` : title);
+            // Require artist — show/promo blocks often have a title with no desc.
+            if (!title || !artist) return null;
+            if (/מקבוק|פרסומת|תשדיר|מבצע|\bKSP\b|יולי\s*\d+|עשורים עם|מוזיקה ברצף|שנות ה-/i.test(`${artist} ${title}`)) {
+                return null;
+            }
+            return parseStreamTitle(`${artist} - ${title}`);
         }
 
         async function fetchGlzNowPlaying(rootId) {
