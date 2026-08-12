@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-12T06:33:37.223Z",
+  "updatedAt": "2026-08-12T06:36:37.728Z",
   "stations": {
     "0": {
       "name": "Glgltz",
@@ -357,6 +357,13 @@
     "2": {
       "name": "88FM",
       "entries": [
+        {
+          "artist": "Berry Sakharof",
+          "title": "לב שקט",
+          "raw": "Berry Sakharof - לב שקט",
+          "playedAt": "2026-08-12T06:36:37.642Z",
+          "source": "kanAcr"
+        },
         {
           "artist": "Shai Tsabari",
           "title": "Lavi Oti",
