@@ -1,9 +1,44 @@
 {
-  "updatedAt": "2026-08-11T23:57:44.351Z",
+  "updatedAt": "2026-08-12T00:49:03.341Z",
   "stations": {
     "0": {
       "name": "Glgltz",
       "entries": [
+        {
+          "artist": "Miley Cyrus",
+          "title": "Midnight Sky",
+          "raw": "Miley Cyrus - Midnight Sky",
+          "playedAt": "2026-08-12T00:51:38Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "דנה אינטרנשיונל",
+          "title": "במקום הכי נמוך בתל אביב",
+          "raw": "דנה אינטרנשיונל - במקום הכי נמוך בתל אביב",
+          "playedAt": "2026-08-12T00:47:38Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "",
+          "title": "מוזיקה זה גלגלצ נקי",
+          "raw": "מוזיקה זה גלגלצ נקי",
+          "playedAt": "2026-08-12T00:47:31Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "אסולין,אנה זק",
+          "title": "תזמני",
+          "raw": "אסולין,אנה זק - תזמני",
+          "playedAt": "2026-08-12T00:45:12Z",
+          "source": "liveSchedule"
+        },
+        {
+          "artist": "Lil Nas X",
+          "title": "MONTERO (Call Me By Your Name) [Explicit]",
+          "raw": "Lil Nas X - MONTERO (Call Me By Your Name) [Explicit]",
+          "playedAt": "2026-08-12T00:42:57Z",
+          "source": "liveSchedule"
+        },
         {
           "artist": "ריטה",
           "title": "ערב כחול עמוק",
@@ -136,6 +171,27 @@
       "name": "Eco",
       "entries": [
         {
+          "artist": "Plain White T's",
+          "title": "Hey There Delilah",
+          "raw": "Plain White T's - Hey There Delilah",
+          "playedAt": "2026-08-12T00:49:01.168Z",
+          "source": "ecoFirestore"
+        },
+        {
+          "artist": "Cat Stevens",
+          "title": "Lady D'Arbanville",
+          "raw": "Cat Stevens - Lady D'Arbanville",
+          "playedAt": "2026-08-12T00:45:55.269Z",
+          "source": "ecoFirestore"
+        },
+        {
+          "artist": "Mumford & Sons",
+          "title": "Lover Of The Light",
+          "raw": "Mumford & Sons - Lover Of The Light",
+          "playedAt": "2026-08-12T00:44:54.262Z",
+          "source": "ecoFirestore"
+        },
+        {
           "artist": "CAKE",
           "title": "I Will Survive",
           "raw": "CAKE - I Will Survive",
@@ -203,6 +259,27 @@
     "2": {
       "name": "88FM",
       "entries": [
+        {
+          "artist": "David Broza",
+          "title": "היונה הלבנה כבר זקנה",
+          "raw": "David Broza - היונה הלבנה כבר זקנה",
+          "playedAt": "2026-08-12T00:49:02.929Z",
+          "source": "kanAcr"
+        },
+        {
+          "artist": "David Broza",
+          "title": "יהיה טוב - שיר שלום מס' א / 349",
+          "raw": "David Broza - יהיה טוב - שיר שלום מס' א / 349",
+          "playedAt": "2026-08-12T00:45:55.387Z",
+          "source": "kanAcr"
+        },
+        {
+          "artist": "יהונתן גפן",
+          "title": "בלדה לחוזר",
+          "raw": "יהונתן גפן - בלדה לחוזר",
+          "playedAt": "2026-08-12T00:44:54.419Z",
+          "source": "kanAcr"
+        },
         {
           "artist": "Shem-Tov Levi, Shlomo Gronich",
           "title": "אבא אוטו",
