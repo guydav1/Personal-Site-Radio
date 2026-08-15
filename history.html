@@ -377,7 +377,7 @@
         }
 
         .col-actions {
-            width: 6.5rem;
+            width: 8.4rem;
             text-align: right;
             white-space: nowrap;
         }
@@ -426,6 +426,12 @@
             border-color: rgba(212, 160, 23, 0.35);
             background: var(--accent-soft);
             animation: pulse 1s ease-in-out infinite;
+        }
+
+        button.icon-btn.playing {
+            color: #14110a;
+            background: var(--accent);
+            border-color: var(--accent);
         }
 
         @keyframes pulse {
@@ -500,7 +506,7 @@
             .col-station { display: none; }
             thead th:nth-child(2) { display: none; }
             .col-time { width: 4.8rem; }
-            .col-actions { width: 5.2rem; }
+            .col-actions { width: 7.2rem; }
             table { font-size: 0.92rem; }
         }
     </style>
@@ -594,6 +600,7 @@
             <div id="tableWrap"></div>
             <div class="action-status" id="actionStatus" aria-live="polite"></div>
         </section>
+        <audio id="previewPlayer" preload="none"></audio>
 
         <p class="footer-note">
             History is written about once a minute from public now-playing feeds.
@@ -636,6 +643,7 @@
         let allRows = [];
         let stationNames = {};
         let selectedStations = new Set(STATION_ORDER);
+        let playingRowId = null;
 
         function escapeHtml(value) {
             return String(value || '')
@@ -736,6 +744,8 @@
 
         const DOWNLOAD_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M5 21h14"></path></svg>`;
         const YOUTUBE_ICON = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31.5 31.5 0 0 0 0 12a31.5 31.5 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31.5 31.5 0 0 0 24 12a31.5 31.5 0 0 0-.5-5.8ZM9.75 15.5v-7l6.5 3.5-6.5 3.5Z"></path></svg>`;
+        const PLAY_ICON = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.14v13.72L19.5 12 8 5.14Z"></path></svg>`;
+        const STOP_ICON = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="1.4"></rect></svg>`;
 
         function renderStationChips() {
             els.stationChips.innerHTML = '';
@@ -875,7 +885,7 @@
                             <th>Station</th>
                             <th>Artist</th>
                             <th>Title</th>
-                            <th class="col-actions">Links</th>
+                            <th class="col-actions">Actions</th>
                         </tr>
                     </thead>
                     <tbody>${body}</tbody>
@@ -888,6 +898,7 @@
                 ? formatTime(row.playedAt)
                 : formatDateTime(row.playedAt);
             const disabled = canActOnRow(row) ? '' : ' disabled';
+            const isPlaying = playingRowId === row.id;
             const payload = escapeHtml(JSON.stringify({
                 artist: row.artist || '',
                 title: row.title || '',
@@ -906,6 +917,7 @@
                     <td class="col-title">${escapeHtml(row.title || row.raw || '—')}</td>
                     <td class="col-actions">
                         <div class="row-actions">
+                            <button type="button" class="icon-btn${isPlaying ? ' playing' : ''}" data-action="play" data-row-id="${escapeHtml(row.id)}" data-song="${payload}" title="${isPlaying ? 'Stop preview' : 'Play sample'}" aria-label="${isPlaying ? 'Stop preview' : 'Play sample'}"${disabled}>${isPlaying ? STOP_ICON : PLAY_ICON}</button>
                             <button type="button" class="icon-btn" data-action="download" data-song="${payload}" title="Download MP3" aria-label="Download MP3"${disabled}>${DOWNLOAD_ICON}</button>
                             <button type="button" class="icon-btn" data-action="youtube" data-song="${payload}" title="Open on YouTube" aria-label="Open on YouTube"${disabled}>${YOUTUBE_ICON}</button>
                         </div>
@@ -959,10 +971,95 @@
         els.groupSelect.addEventListener('change', render);
 
         let actionBusy = false;
+        let playToken = 0;
+        const previewPlayer = document.getElementById('previewPlayer');
+        let previewEndTimer = null;
+
+        function clearPreviewTimer() {
+            if (previewEndTimer) {
+                clearTimeout(previewEndTimer);
+                previewEndTimer = null;
+            }
+        }
+
+        function haltPreview() {
+            clearPreviewTimer();
+            previewPlayer.pause();
+            previewPlayer.removeAttribute('src');
+            previewPlayer.load();
+        }
+
+        function stopPreview(status) {
+            playToken += 1;
+            haltPreview();
+            playingRowId = null;
+            if (status !== undefined) els.actionStatus.textContent = status;
+            render();
+        }
+
+        function seekPreview(startSec) {
+            try {
+                if (Math.abs((previewPlayer.currentTime || 0) - startSec) > 1.25) {
+                    previewPlayer.currentTime = startSec;
+                }
+            } catch (err) {
+                // Some streams ignore seek; play from wherever they start.
+            }
+        }
+
+        function armPreviewEnd(sampleSec) {
+            clearPreviewTimer();
+            previewEndTimer = setTimeout(() => {
+                stopPreview('Preview finished.');
+            }, Math.max(8, Number(sampleSec) || 25) * 1000);
+        }
+
+        async function playPreview(rowId, song) {
+            if (playingRowId === rowId) {
+                stopPreview('');
+                return;
+            }
+
+            haltPreview();
+            const token = ++playToken;
+            playingRowId = rowId;
+            els.actionStatus.textContent = 'Finding a sample…';
+            render();
+
+            try {
+                const preview = await HistoryMedia.resolvePreview(song);
+                if (token !== playToken) return;
+                previewPlayer.src = preview.url;
+                const start = Number(preview.startSec) || 0;
+                if (previewPlayer.readyState >= 1) seekPreview(start);
+                else previewPlayer.addEventListener('loadedmetadata', () => {
+                    if (token === playToken) seekPreview(start);
+                }, { once: true });
+                await previewPlayer.play();
+                if (token !== playToken) return;
+                armPreviewEnd(preview.sampleSec);
+                els.actionStatus.textContent = `Playing sample: ${preview.title}`;
+            } catch (err) {
+                if (token !== playToken) return;
+                haltPreview();
+                playingRowId = null;
+                els.actionStatus.textContent = 'Could not play sample.';
+                console.log(err);
+                render();
+            }
+        }
+
+        previewPlayer.addEventListener('ended', () => {
+            stopPreview('Preview finished.');
+        });
+        previewPlayer.addEventListener('error', () => {
+            if (!playingRowId) return;
+            stopPreview('Could not play sample.');
+        });
 
         els.tableWrap.addEventListener('click', async (event) => {
             const btn = event.target.closest('button[data-action]');
-            if (!btn || actionBusy || btn.disabled) return;
+            if (!btn || btn.disabled) return;
             const action = btn.getAttribute('data-action');
             let song;
             try {
@@ -972,6 +1069,12 @@
             }
             if (!canActOnRow(song)) return;
 
+            if (action === 'play') {
+                await playPreview(btn.getAttribute('data-row-id'), song);
+                return;
+            }
+
+            if (actionBusy) return;
             actionBusy = true;
             btn.classList.add('busy');
             btn.disabled = true;
