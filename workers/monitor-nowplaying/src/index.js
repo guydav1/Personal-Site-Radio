@@ -518,6 +518,80 @@ async function serveHistory(env) {
     });
 }
 
+const PREVIEW_SAMPLE_SEC = 25;
+const PREVIEW_START_SEC = 40;
+
+function videoIdFromText(value) {
+    const text = String(value || '');
+    const match = text.match(/[?&]v=([\w-]{11})/)
+        || text.match(/youtu\.be\/([\w-]{11})/)
+        || text.match(/\/shorts\/([\w-]{11})/)
+        || text.match(/^([\w-]{11})$/);
+    return match ? match[1] : null;
+}
+
+function firstSearchHit(data) {
+    const items = Array.isArray(data && data.items) ? data.items
+        : (Array.isArray(data) ? data : []);
+    for (const item of items) {
+        if (!item) continue;
+        const id = item.videoId || item.id || videoIdFromText(item.url);
+        if (!id) continue;
+        return { id, title: item.title || '' };
+    }
+    return null;
+}
+
+async function searchPreviewVideo(query) {
+    const searches = [query, `${query} official audio`].filter(Boolean);
+    const endpoints = [
+        q => `https://api.piped.private.coffee/search?q=${encodeURIComponent(q)}&filter=videos`,
+        q => `https://invidious.materialio.us/api/v1/search?q=${encodeURIComponent(q)}&type=video`
+    ];
+    let lastError = null;
+    for (const makeUrl of endpoints) {
+        for (const q of searches) {
+            try {
+                const response = await fetch(makeUrl(q), {
+                    headers: { Accept: 'application/json' }
+                });
+                if (!response.ok) {
+                    throw new Error(`search HTTP ${response.status}`);
+                }
+                const hit = firstSearchHit(await response.json());
+                if (hit) return hit;
+            } catch (err) {
+                lastError = err;
+            }
+        }
+    }
+    throw lastError || new Error('No preview match');
+}
+
+function previewPayload(hit, query) {
+    const startSec = PREVIEW_START_SEC;
+    const sampleSec = PREVIEW_SAMPLE_SEC;
+    const endSec = startSec + sampleSec;
+    return {
+        videoId: hit.id,
+        title: hit.title || query,
+        startSec,
+        sampleSec,
+        embedUrl: `https://www.youtube-nocookie.com/embed/${hit.id}?autoplay=1&start=${startSec}&end=${endSec}&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1`
+    };
+}
+
+async function servePreview(requestUrl) {
+    const query = String(requestUrl.searchParams.get('q') || '').trim();
+    if (!query) {
+        return jsonResponse({ ok: false, error: 'Missing q' }, 400);
+    }
+    const hit = await searchPreviewVideo(query);
+    return jsonResponse(previewPayload(hit, query), 200, {
+        'Cache-Control': 'public, max-age=300'
+    });
+}
+
 export default {
     async scheduled(controller, env) {
         await runMonitor(env);
@@ -542,6 +616,18 @@ export default {
                 return jsonResponse(
                     { ok: false, error: String(err && err.message ? err.message : err) },
                     500
+                );
+            }
+        }
+
+        if (url.pathname === '/preview') {
+            try {
+                return await servePreview(url);
+            } catch (err) {
+                console.error(err);
+                return jsonResponse(
+                    { ok: false, error: String(err && err.message ? err.message : err) },
+                    502
                 );
             }
         }

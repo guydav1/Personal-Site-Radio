@@ -83,59 +83,54 @@
     }
 
     const previewCache = new Map();
+    const PREVIEW_API = 'https://radio-monitor-nowplaying.guydav1.workers.dev/preview';
     const SAMPLE_SEC = 25;
+    const START_SEC = 40;
 
-    function pickAudioStream(streams) {
-        const usable = (streams || []).filter(stream => stream && stream.url && !stream.videoOnly);
-        if (!usable.length) return null;
-        const ranked = usable.slice().sort((a, b) => (Number(a.bitrate) || 0) - (Number(b.bitrate) || 0));
-        return ranked.find(stream => /mp4|m4a|mpeg|aac/i.test(`${stream.mimeType || ''} ${stream.format || ''}`))
-            || ranked[0];
-    }
-
-    function sampleWindow(durationSec) {
-        const duration = Number(durationSec) || 0;
-        const sampleSec = SAMPLE_SEC;
-        if (duration > 0 && duration <= sampleSec + 5) {
-            return { startSec: 0, sampleSec: Math.max(8, duration) };
-        }
-        let startSec = duration >= 80 ? 40 : 20;
-        if (duration > 0 && startSec + sampleSec > duration) {
-            startSec = Math.max(0, duration - sampleSec);
-        }
-        return { startSec, sampleSec };
+    function embedUrlFor(videoId, startSec, sampleSec) {
+        const start = Number(startSec) || START_SEC;
+        const end = start + (Number(sampleSec) || SAMPLE_SEC);
+        return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&start=${start}&end=${end}&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1`;
     }
 
     async function resolvePreview(song) {
         const key = songQuery(song);
         if (previewCache.has(key)) return previewCache.get(key);
 
+        try {
+            const response = await fetch(`${PREVIEW_API}?q=${encodeURIComponent(key)}`, {
+                headers: { Accept: 'application/json' }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                if (data && (data.embedUrl || data.videoId)) {
+                    const preview = {
+                        videoId: data.videoId,
+                        title: data.title || key,
+                        startSec: data.startSec || START_SEC,
+                        sampleSec: data.sampleSec || SAMPLE_SEC,
+                        embedUrl: data.embedUrl || embedUrlFor(data.videoId, data.startSec, data.sampleSec)
+                    };
+                    previewCache.set(key, preview);
+                    return preview;
+                }
+            }
+        } catch (err) {
+            console.log(err);
+        }
+
         const video = await searchYouTube(song);
         const id = video.id || videoIdFromUrl(video.url);
         if (!id) throw new Error('No video id');
-
-        let lastError = null;
-        for (const base of PIPED_INSTANCES) {
-            try {
-                const response = await fetch(`${base}/streams/${encodeURIComponent(id)}`);
-                if (!response.ok) throw new Error('streams failed');
-                const data = await response.json();
-                const stream = pickAudioStream(data.audioStreams);
-                if (!stream) throw new Error('no audio stream');
-                const window = sampleWindow(data.duration);
-                const preview = {
-                    url: stream.url,
-                    title: data.title || video.title,
-                    startSec: window.startSec,
-                    sampleSec: window.sampleSec
-                };
-                previewCache.set(key, preview);
-                return preview;
-            } catch (err) {
-                lastError = err;
-            }
-        }
-        throw lastError || new Error('Could not load preview');
+        const preview = {
+            videoId: id,
+            title: video.title || key,
+            startSec: START_SEC,
+            sampleSec: SAMPLE_SEC,
+            embedUrl: embedUrlFor(id, START_SEC, SAMPLE_SEC)
+        };
+        previewCache.set(key, preview);
+        return preview;
     }
 
     function triggerUrlDownload(url) {

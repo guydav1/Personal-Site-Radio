@@ -446,6 +446,16 @@
             color: var(--faint);
         }
 
+        #previewFrame {
+            position: fixed;
+            width: 1px;
+            height: 1px;
+            left: -9999px;
+            border: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+
         .day-banner td {
             padding: 0.65rem 1rem;
             background: rgba(212, 160, 23, 0.06);
@@ -600,7 +610,7 @@
             <div id="tableWrap"></div>
             <div class="action-status" id="actionStatus" aria-live="polite"></div>
         </section>
-        <audio id="previewPlayer" preload="none"></audio>
+        <iframe id="previewFrame" title="Song sample" allow="autoplay; encrypted-media" tabindex="-1"></iframe>
 
         <p class="footer-note">
             History is written about once a minute from public now-playing feeds.
@@ -972,7 +982,7 @@
 
         let actionBusy = false;
         let playToken = 0;
-        const previewPlayer = document.getElementById('previewPlayer');
+        const previewFrame = document.getElementById('previewFrame');
         let previewEndTimer = null;
 
         function clearPreviewTimer() {
@@ -984,9 +994,7 @@
 
         function haltPreview() {
             clearPreviewTimer();
-            previewPlayer.pause();
-            previewPlayer.removeAttribute('src');
-            previewPlayer.load();
+            previewFrame.removeAttribute('src');
         }
 
         function stopPreview(status) {
@@ -995,16 +1003,6 @@
             playingRowId = null;
             if (status !== undefined) els.actionStatus.textContent = status;
             render();
-        }
-
-        function seekPreview(startSec) {
-            try {
-                if (Math.abs((previewPlayer.currentTime || 0) - startSec) > 1.25) {
-                    previewPlayer.currentTime = startSec;
-                }
-            } catch (err) {
-                // Some streams ignore seek; play from wherever they start.
-            }
         }
 
         function armPreviewEnd(sampleSec) {
@@ -1029,14 +1027,7 @@
             try {
                 const preview = await HistoryMedia.resolvePreview(song);
                 if (token !== playToken) return;
-                previewPlayer.src = preview.url;
-                const start = Number(preview.startSec) || 0;
-                if (previewPlayer.readyState >= 1) seekPreview(start);
-                else previewPlayer.addEventListener('loadedmetadata', () => {
-                    if (token === playToken) seekPreview(start);
-                }, { once: true });
-                await previewPlayer.play();
-                if (token !== playToken) return;
+                previewFrame.src = preview.embedUrl;
                 armPreviewEnd(preview.sampleSec);
                 els.actionStatus.textContent = `Playing sample: ${preview.title}`;
             } catch (err) {
@@ -1048,14 +1039,6 @@
                 render();
             }
         }
-
-        previewPlayer.addEventListener('ended', () => {
-            stopPreview('Preview finished.');
-        });
-        previewPlayer.addEventListener('error', () => {
-            if (!playingRowId) return;
-            stopPreview('Could not play sample.');
-        });
 
         els.tableWrap.addEventListener('click', async (event) => {
             const btn = event.target.closest('button[data-action]');
