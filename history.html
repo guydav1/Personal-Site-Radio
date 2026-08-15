@@ -9,6 +9,9 @@
     <title>Play history · Radio</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://www.youtube-nocookie.com">
+    <link rel="preconnect" href="https://www.youtube.com">
+    <link rel="preconnect" href="https://i.ytimg.com">
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
@@ -446,7 +449,8 @@
             color: var(--faint);
         }
 
-        #previewFrame {
+        #previewHost,
+        #previewHost iframe {
             position: fixed;
             width: 1px;
             height: 1px;
@@ -610,7 +614,7 @@
             <div id="tableWrap"></div>
             <div class="action-status" id="actionStatus" aria-live="polite"></div>
         </section>
-        <iframe id="previewFrame" title="Song sample" allow="autoplay; encrypted-media" tabindex="-1"></iframe>
+        <div id="previewHost" aria-hidden="true"></div>
 
         <p class="footer-note">
             History is written about once a minute from public now-playing feeds.
@@ -619,6 +623,7 @@
         </p>
     </main>
 
+    <script src="https://www.youtube.com/iframe_api"></script>
     <script src="scripts/history-media.js"></script>
     <script>
         const TIME_ZONE = 'Asia/Jerusalem';
@@ -962,6 +967,7 @@
                 selectedStations = new Set(STATION_ORDER.filter(id => stationNames[id]));
                 renderStationChips();
                 render();
+                prefetchVisiblePreviews();
             } catch (err) {
                 els.updatedAt.textContent = 'History unavailable.';
                 els.tableWrap.innerHTML = `
@@ -982,8 +988,10 @@
 
         let actionBusy = false;
         let playToken = 0;
-        const previewFrame = document.getElementById('previewFrame');
         let previewEndTimer = null;
+        let ytPlayer = null;
+        let ytReady = false;
+        const ytWaiters = [];
 
         function clearPreviewTimer() {
             if (previewEndTimer) {
@@ -992,9 +1000,21 @@
             }
         }
 
+        function syncPlayButtons() {
+            els.tableWrap.querySelectorAll('button[data-action="play"]').forEach(btn => {
+                const on = btn.getAttribute('data-row-id') === playingRowId;
+                btn.classList.toggle('playing', on);
+                btn.title = on ? 'Stop preview' : 'Play sample';
+                btn.setAttribute('aria-label', btn.title);
+                btn.innerHTML = on ? STOP_ICON : PLAY_ICON;
+            });
+        }
+
         function haltPreview() {
             clearPreviewTimer();
-            previewFrame.removeAttribute('src');
+            if (ytPlayer && typeof ytPlayer.stopVideo === 'function') {
+                try { ytPlayer.stopVideo(); } catch (err) { /* ignore */ }
+            }
         }
 
         function stopPreview(status) {
@@ -1002,7 +1022,7 @@
             haltPreview();
             playingRowId = null;
             if (status !== undefined) els.actionStatus.textContent = status;
-            render();
+            syncPlayButtons();
         }
 
         function armPreviewEnd(sampleSec) {
@@ -1010,6 +1030,65 @@
             previewEndTimer = setTimeout(() => {
                 stopPreview('Preview finished.');
             }, Math.max(8, Number(sampleSec) || 25) * 1000);
+        }
+
+        function createYtPlayer() {
+            if (ytPlayer || !window.YT || !YT.Player) return;
+            ytPlayer = new YT.Player('previewHost', {
+                width: 1,
+                height: 1,
+                playerVars: {
+                    autoplay: 0,
+                    controls: 0,
+                    rel: 0,
+                    modestbranding: 1,
+                    playsinline: 1,
+                    disablekb: 1,
+                    origin: location.origin
+                },
+                events: {
+                    onReady() {
+                        ytReady = true;
+                        while (ytWaiters.length) ytWaiters.shift()(ytPlayer);
+                    },
+                    onStateChange(event) {
+                        if (!playingRowId) return;
+                        if (event.data === YT.PlayerState.ENDED) {
+                            stopPreview('Preview finished.');
+                        }
+                    }
+                }
+            });
+        }
+
+        function ensureYtPlayer() {
+            if (ytReady && ytPlayer) return Promise.resolve(ytPlayer);
+            return new Promise(resolve => {
+                ytWaiters.push(resolve);
+                if (window.YT && YT.Player) createYtPlayer();
+            });
+        }
+
+        window.onYouTubeIframeAPIReady = createYtPlayer;
+        if (window.YT && YT.Player) createYtPlayer();
+
+        async function prefetchVisiblePreviews() {
+            const seen = new Set();
+            const songs = [];
+            for (const row of allRows) {
+                const key = HistoryMedia.songQuery(row);
+                if (!key || seen.has(key) || HistoryMedia.peekPreview(row)) continue;
+                seen.add(key);
+                songs.push(row);
+                if (songs.length >= 16) break;
+            }
+            for (const song of songs) {
+                try {
+                    await HistoryMedia.resolvePreview(song);
+                } catch (err) {
+                    // Prefetch is best-effort.
+                }
+            }
         }
 
         async function playPreview(rowId, song) {
@@ -1021,14 +1100,24 @@
             haltPreview();
             const token = ++playToken;
             playingRowId = rowId;
-            els.actionStatus.textContent = 'Finding a sample…';
-            render();
+            const cached = HistoryMedia.peekPreview(song);
+            els.actionStatus.textContent = cached ? `Playing sample: ${cached.title}` : 'Finding a sample…';
+            syncPlayButtons();
 
             try {
-                const preview = await HistoryMedia.resolvePreview(song);
+                const [preview, player] = await Promise.all([
+                    HistoryMedia.resolvePreview(song),
+                    ensureYtPlayer()
+                ]);
                 if (token !== playToken) return;
-                previewFrame.src = preview.embedUrl;
-                armPreviewEnd(preview.sampleSec);
+                const start = Number(preview.startSec) || 40;
+                const sample = Number(preview.sampleSec) || 25;
+                player.loadVideoById({
+                    videoId: preview.videoId,
+                    startSeconds: start,
+                    endSeconds: start + sample
+                });
+                armPreviewEnd(sample);
                 els.actionStatus.textContent = `Playing sample: ${preview.title}`;
             } catch (err) {
                 if (token !== playToken) return;
@@ -1036,9 +1125,20 @@
                 playingRowId = null;
                 els.actionStatus.textContent = 'Could not play sample.';
                 console.log(err);
-                render();
+                syncPlayButtons();
             }
         }
+
+        els.tableWrap.addEventListener('pointerenter', (event) => {
+            const btn = event.target.closest('button[data-action="play"]');
+            if (!btn || btn.disabled) return;
+            try {
+                const song = JSON.parse(btn.getAttribute('data-song') || '{}');
+                if (canActOnRow(song)) HistoryMedia.resolvePreview(song).catch(() => {});
+            } catch (err) {
+                // ignore
+            }
+        }, true);
 
         els.tableWrap.addEventListener('click', async (event) => {
             const btn = event.target.closest('button[data-action]');

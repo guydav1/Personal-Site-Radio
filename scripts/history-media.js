@@ -93,6 +93,10 @@
         return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&start=${start}&end=${end}&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1`;
     }
 
+    function peekPreview(song) {
+        return previewCache.get(songQuery(song)) || null;
+    }
+
     async function resolvePreview(song) {
         const key = songQuery(song);
         if (previewCache.has(key)) return previewCache.get(key);
@@ -225,6 +229,7 @@
         searchYouTube,
         openYouTube,
         downloadMp3,
-        resolvePreview
+        resolvePreview,
+        peekPreview
     };
 })(window);

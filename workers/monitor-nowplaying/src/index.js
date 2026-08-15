@@ -581,14 +581,33 @@ function previewPayload(hit, query) {
     };
 }
 
-async function servePreview(requestUrl) {
+async function servePreview(requestUrl, env) {
     const query = String(requestUrl.searchParams.get('q') || '').trim();
     if (!query) {
         return jsonResponse({ ok: false, error: 'Missing q' }, 400);
     }
+    const cacheKey = `preview:${normalizeKey(query)}`;
+    if (env && env.HISTORY) {
+        try {
+            const cached = await env.HISTORY.get(cacheKey, 'json');
+            if (cached && cached.videoId) {
+                return jsonResponse(cached, 200, {
+                    'Cache-Control': 'public, max-age=600'
+                });
+            }
+        } catch (err) {
+            console.warn('preview cache read failed:', err.message || err);
+        }
+    }
     const hit = await searchPreviewVideo(query);
-    return jsonResponse(previewPayload(hit, query), 200, {
-        'Cache-Control': 'public, max-age=300'
+    const payload = previewPayload(hit, query);
+    if (env && env.HISTORY) {
+        env.HISTORY.put(cacheKey, JSON.stringify(payload), {
+            expirationTtl: 7 * 24 * 60 * 60
+        }).catch(err => console.warn('preview cache write failed:', err.message || err));
+    }
+    return jsonResponse(payload, 200, {
+        'Cache-Control': 'public, max-age=600'
     });
 }
 
@@ -622,7 +641,7 @@ export default {
 
         if (url.pathname === '/preview') {
             try {
-                return await servePreview(url);
+                return await servePreview(url, env);
             } catch (err) {
                 console.error(err);
                 return jsonResponse(
