@@ -449,8 +449,10 @@
             color: var(--faint);
         }
 
-        #previewHost,
-        #previewHost iframe {
+        #previewHostA,
+        #previewHostB,
+        #previewHostA iframe,
+        #previewHostB iframe {
             position: fixed;
             width: 1px;
             height: 1px;
@@ -506,6 +508,100 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
+        .player-bar {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 40;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 0.7rem 1.25rem;
+            background: rgba(18, 21, 26, 0.92);
+            border-top: 1px solid var(--line-strong);
+            backdrop-filter: blur(14px);
+            box-shadow: 0 -12px 34px rgba(0, 0, 0, 0.35);
+            transform: translateY(110%);
+            visibility: hidden;
+            transition: transform 0.28s ease, visibility 0s linear 0.28s;
+        }
+
+        .player-bar.show {
+            transform: translateY(0);
+            visibility: visible;
+            transition: transform 0.28s ease;
+        }
+
+        body.pb-open {
+            padding-bottom: 5.5rem;
+        }
+
+        .pb-song {
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+
+        .pb-meta {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            line-height: 1.3;
+        }
+
+        .pb-artist {
+            color: var(--muted);
+            font-size: 0.8rem;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .pb-artist[hidden] { display: none; }
+
+        .pb-title {
+            font-weight: 600;
+            font-size: 0.92rem;
+            letter-spacing: -0.01em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .pb-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.2rem;
+            flex: 0 0 auto;
+        }
+
+        .pb-main {
+            width: 2.5rem;
+            height: 2.5rem;
+        }
+
+        .pb-main svg {
+            width: 1.25rem;
+            height: 1.25rem;
+        }
+
+        .pb-vol {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        #pbVol {
+            width: 90px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
         @media (max-width: 900px) {
             .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .col-artist { display: none; }
@@ -516,6 +612,13 @@
             .topbar-inner,
             .page { width: min(var(--max), calc(100% - 1.25rem)); }
             .brand-sub { display: none; }
+            .player-bar {
+                flex-wrap: wrap;
+                gap: 0.6rem;
+                padding: 0.6rem 0.9rem;
+            }
+            .pb-song { width: 100%; }
+            #pbVol { width: 64px; }
             .kpi-grid { grid-template-columns: 1fr 1fr; }
             .col-station { display: none; }
             thead th:nth-child(2) { display: none; }
@@ -614,7 +717,8 @@
             <div id="tableWrap"></div>
             <div class="action-status" id="actionStatus" aria-live="polite"></div>
         </section>
-        <div id="previewHost" aria-hidden="true"></div>
+        <div id="previewHostA" aria-hidden="true"></div>
+        <div id="previewHostB" aria-hidden="true"></div>
 
         <p class="footer-note">
             History is written about once a minute from public now-playing feeds.
@@ -622,6 +726,39 @@
             <a href="index.html">Return to live radio</a>
         </p>
     </main>
+
+    <footer class="player-bar" id="playerBar" aria-label="Now playing">
+        <div class="pb-song">
+            <span class="station-pill pb-station">
+                <span class="station-dot" id="pbDot"></span>
+                <span id="pbStation"></span>
+            </span>
+            <span class="pb-meta">
+                <span id="pbArtist" class="pb-artist"></span>
+                <span id="pbTitle" class="pb-title"></span>
+            </span>
+        </div>
+        <div class="pb-controls" role="group" aria-label="Playback controls">
+            <button type="button" class="icon-btn" id="pbPrev" title="Previous" aria-label="Previous" disabled>
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5.5h2.2v13H6z"></path><path d="M18 5.5v13L9.2 12z"></path></svg>
+            </button>
+            <button type="button" class="icon-btn pb-main" id="pbPlay" title="Pause" aria-label="Pause">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="5.5" width="3.6" height="13" rx="1.2"></rect><rect x="13.9" y="5.5" width="3.6" height="13" rx="1.2"></rect></svg>
+            </button>
+            <button type="button" class="icon-btn" id="pbNext" title="Next" aria-label="Next" disabled>
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.8 5.5H18v13h-2.2z"></path><path d="M6 5.5v13l8.8-6.5z"></path></svg>
+            </button>
+            <span class="pb-vol">
+                <button type="button" class="icon-btn" id="pbVolBtn" title="Mute" aria-label="Mute">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6.5 9H3v6h3.5L11 19z"></path><path d="M15 9.5a4 4 0 0 1 0 5"></path><path d="M17.8 7a8 8 0 0 1 0 10"></path></svg>
+                </button>
+                <input id="pbVol" type="range" min="0" max="100" step="1" value="70" aria-label="Volume">
+            </span>
+            <button type="button" class="icon-btn" id="pbClose" title="Stop" aria-label="Stop">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="1.4"></rect></svg>
+            </button>
+        </div>
+    </footer>
 
     <script src="https://www.youtube.com/iframe_api"></script>
     <script src="scripts/history-media.js"></script>
@@ -652,7 +789,18 @@
             kpiTopStation: document.getElementById('kpiTopStation'),
             kpiTopStationHint: document.getElementById('kpiTopStationHint'),
             kpiCoverage: document.getElementById('kpiCoverage'),
-            kpiCoverageHint: document.getElementById('kpiCoverageHint')
+            kpiCoverageHint: document.getElementById('kpiCoverageHint'),
+            playerBar: document.getElementById('playerBar'),
+            pbDot: document.getElementById('pbDot'),
+            pbStation: document.getElementById('pbStation'),
+            pbArtist: document.getElementById('pbArtist'),
+            pbTitle: document.getElementById('pbTitle'),
+            pbPrev: document.getElementById('pbPrev'),
+            pbPlay: document.getElementById('pbPlay'),
+            pbNext: document.getElementById('pbNext'),
+            pbVolBtn: document.getElementById('pbVolBtn'),
+            pbVol: document.getElementById('pbVol'),
+            pbClose: document.getElementById('pbClose')
         };
 
         let allRows = [];
@@ -761,6 +909,11 @@
         const YOUTUBE_ICON = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31.5 31.5 0 0 0 0 12a31.5 31.5 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31.5 31.5 0 0 0 24 12a31.5 31.5 0 0 0-.5-5.8ZM9.75 15.5v-7l6.5 3.5-6.5 3.5Z"></path></svg>`;
         const PLAY_ICON = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.14v13.72L19.5 12 8 5.14Z"></path></svg>`;
         const STOP_ICON = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="1.4"></rect></svg>`;
+        const PAUSE_ICON = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="5.5" width="3.6" height="13" rx="1.2"></rect><rect x="13.9" y="5.5" width="3.6" height="13" rx="1.2"></rect></svg>`;
+        const PREV_ICON = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5.5h2.2v13H6z"></path><path d="M18 5.5v13L9.2 12z"></path></svg>`;
+        const NEXT_ICON = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.8 5.5H18v13h-2.2z"></path><path d="M6 5.5v13l8.8-6.5z"></path></svg>`;
+        const VOLUME_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6.5 9H3v6h3.5L11 19z"></path><path d="M15 9.5a4 4 0 0 1 0 5"></path><path d="M17.8 7a8 8 0 0 1 0 10"></path></svg>`;
+        const VOLUME_MUTED_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6.5 9H3v6h3.5L11 19z"></path><path d="m15.5 9.5 5 5"></path><path d="m20.5 9.5-5 5"></path></svg>`;
 
         function renderStationChips() {
             els.stationChips.innerHTML = '';
@@ -986,12 +1139,23 @@
         els.sortSelect.addEventListener('change', render);
         els.groupSelect.addEventListener('change', render);
 
+        // ---------- Queue playback (gapless, media-key aware) ----------
         let actionBusy = false;
+        let queue = [];
+        let queueIndex = -1;
         let playToken = 0;
         let previewEndTimer = null;
-        let ytPlayer = null;
+        let sampleDeadline = 0;
         let ytReady = false;
         const ytWaiters = [];
+        const ytPlayers = { a: null, b: null };
+        const ytReadyState = { a: false, b: false };
+        let activePlayerKey = null;   // 'a' | 'b' — player currently producing audio
+        let cuedIndex = -1;           // queue index pre-cued on the idle player
+        let volume = Number(localStorage.getItem('historyVolume')) || 70;
+        let muted = localStorage.getItem('historyMuted') === '1';
+        let paused = false;
+        let currentVideo = null;   // { videoId, title } of the active sample, for debugging
 
         function clearPreviewTimer() {
             if (previewEndTimer) {
@@ -1004,7 +1168,7 @@
             els.tableWrap.querySelectorAll('button[data-action="play"]').forEach(btn => {
                 const on = btn.getAttribute('data-row-id') === playingRowId;
                 btn.classList.toggle('playing', on);
-                btn.title = on ? 'Stop preview' : 'Play sample';
+                btn.title = on ? 'Stop' : 'Play sample';
                 btn.setAttribute('aria-label', btn.title);
                 btn.innerHTML = on ? STOP_ICON : PLAY_ICON;
             });
@@ -1012,65 +1176,137 @@
 
         function haltPreview() {
             clearPreviewTimer();
-            if (ytPlayer && typeof ytPlayer.stopVideo === 'function') {
-                try { ytPlayer.stopVideo(); } catch (err) { /* ignore */ }
-            }
-        }
-
-        function stopPreview(status) {
-            playToken += 1;
-            haltPreview();
-            playingRowId = null;
-            if (status !== undefined) els.actionStatus.textContent = status;
-            syncPlayButtons();
-        }
-
-        function armPreviewEnd(sampleSec) {
-            clearPreviewTimer();
-            previewEndTimer = setTimeout(() => {
-                stopPreview('Preview finished.');
-            }, Math.max(8, Number(sampleSec) || 25) * 1000);
-        }
-
-        function createYtPlayer() {
-            if (ytPlayer || !window.YT || !YT.Player) return;
-            ytPlayer = new YT.Player('previewHost', {
-                width: 1,
-                height: 1,
-                playerVars: {
-                    autoplay: 0,
-                    controls: 0,
-                    rel: 0,
-                    modestbranding: 1,
-                    playsinline: 1,
-                    disablekb: 1,
-                    origin: location.origin
-                },
-                events: {
-                    onReady() {
-                        ytReady = true;
-                        while (ytWaiters.length) ytWaiters.shift()(ytPlayer);
-                    },
-                    onStateChange(event) {
-                        if (!playingRowId) return;
-                        if (event.data === YT.PlayerState.ENDED) {
-                            stopPreview('Preview finished.');
-                        }
-                    }
+            [ytPlayers.a, ytPlayers.b].forEach(player => {
+                if (player && typeof player.stopVideo === 'function') {
+                    try { player.stopVideo(); } catch (err) { /* ignore */ }
                 }
             });
         }
 
-        function ensureYtPlayer() {
-            if (ytReady && ytPlayer) return Promise.resolve(ytPlayer);
-            return new Promise(resolve => {
-                ytWaiters.push(resolve);
-                if (window.YT && YT.Player) createYtPlayer();
+        function activePlayer() {
+            return activePlayerKey ? ytPlayers[activePlayerKey] : null;
+        }
+
+        function applyVolume(player) {
+            const target = player || activePlayer();
+            if (!target) return;
+            try {
+                target.setVolume(volume);
+                if (muted) target.mute();
+                else target.unMute();
+            } catch (err) { /* ignore */ }
+        }
+
+        function changeVolume(delta) {
+            volume = Math.max(0, Math.min(100, volume + delta));
+            localStorage.setItem('historyVolume', String(volume));
+            applyVolume();
+            updateFooterControls();
+        }
+
+        function toggleMute() {
+            muted = !muted;
+            localStorage.setItem('historyMuted', muted ? '1' : '0');
+            applyVolume();
+            updateFooterControls();
+        }
+
+        // ---------- YouTube players (two, for gapless switching) ----------
+
+        function onPlayerState(key, event) {
+            if (activePlayerKey !== key) return;
+            if (event.data === YT.PlayerState.ENDED) {
+                paused = false;
+                clearPreviewTimer();
+                advanceQueue(true);
+            } else if (event.data === YT.PlayerState.PLAYING) {
+                paused = false;
+                updateFooterControls();
+                // Only buffer the next sample once the current one is actually
+                // streaming, so the two embeds don't compete right at load time.
+                prepNext();
+            } else if (event.data === YT.PlayerState.PAUSED) {
+                paused = true;
+                updateFooterControls();
+            }
+        }
+
+        function onPlayerError(key, event) {
+            if (activePlayerKey !== key) return;   // ignore errors on the idle (pre-cue) player
+            const token = playToken;
+            const code = event && event.data;
+            let codeLabel = String(code);
+            if (window.YT && YT.PlayerError && YT.PlayerError[code]) {
+                codeLabel = `${YT.PlayerError[code]} (${code})`;
+            }
+            const name = currentVideo ? currentVideo.title : 'this sample';
+            const vid = currentVideo ? ` (video ID: ${currentVideo.videoId})` : '';
+            els.actionStatus.textContent = `Couldn't start “${name}”${vid} — YouTube error ${codeLabel}.`;
+            // Let the message stay visible briefly, then keep the queue moving.
+            setTimeout(() => {
+                if (token !== playToken) return;
+                advanceQueue(true);
+            }, 2000);
+        }
+
+        function onPlayerReady(key) {
+            ytReadyState[key] = true;
+            // Both players carry the user's volume/mute from the start, so the
+            // idle player never inherits a stale default when it becomes active.
+            applyVolume(ytPlayers[key]);
+            if (ytReadyState.a && ytReadyState.b) {
+                ytReady = true;
+                while (ytWaiters.length) ytWaiters.shift()();
+            }
+        }
+
+        function createYtPlayers() {
+            if (ytPlayers.a || !window.YT || !YT.Player) return;
+            const baseVars = {
+                autoplay: 0,
+                controls: 0,
+                rel: 0,
+                modestbranding: 1,
+                playsinline: 1,
+                disablekb: 1,
+                origin: location.origin
+            };
+            const events = key => ({
+                onReady: () => onPlayerReady(key),
+                onStateChange: event => onPlayerState(key, event),
+                onError: event => onPlayerError(key, event)
+            });
+            ytPlayers.a = new YT.Player('previewHostA', {
+                width: 1,
+                height: 1,
+                playerVars: { ...baseVars },
+                events: events('a')
+            });
+            ytPlayers.b = new YT.Player('previewHostB', {
+                width: 1,
+                height: 1,
+                playerVars: { ...baseVars },
+                events: events('b')
             });
         }
 
-        window.onYouTubeIframeAPIReady = createYtPlayer;
-        if (window.YT && YT.Player) createYtPlayer();
+        function ensureYtPlayers() {
+            return new Promise((resolve, reject) => {
+                const failTimer = setTimeout(() => reject(new Error('YouTube player timed out')), 15000);
+                const poll = setInterval(() => {
+                    if (!window.YT || !YT.Player) return;
+                    if (!ytPlayers.a) createYtPlayers();
+                    if (ytReady) {
+                        clearTimeout(failTimer);
+                        clearInterval(poll);
+                        resolve();
+                    }
+                }, 150);
+            });
+        }
+
+        window.onYouTubeIframeAPIReady = createYtPlayers;
+        if (window.YT && YT.Player) createYtPlayers();
 
         async function prefetchVisiblePreviews() {
             const seen = new Set();
@@ -1091,43 +1327,340 @@
             }
         }
 
-        async function playPreview(rowId, song) {
-            if (playingRowId === rowId) {
-                stopPreview('');
+        // ---------- Queue state & playback ----------
+
+        function showFooter() {
+            els.playerBar.classList.add('show');
+            document.body.classList.add('pb-open');
+        }
+
+        function hideFooter() {
+            els.playerBar.classList.remove('show');
+            document.body.classList.remove('pb-open');
+        }
+
+        function updateFooterControls() {
+            const playing = !paused && !!playingRowId;
+            els.pbPlay.innerHTML = playing ? PAUSE_ICON : PLAY_ICON;
+            els.pbPlay.title = playing ? 'Pause' : 'Play';
+            els.pbPlay.setAttribute('aria-label', els.pbPlay.title);
+            els.pbPrev.disabled = queueIndex <= 0;
+            els.pbNext.disabled = queueIndex >= queue.length - 1;
+            els.pbVolBtn.innerHTML = (muted || volume === 0) ? VOLUME_MUTED_ICON : VOLUME_ICON;
+            els.pbVolBtn.title = muted ? 'Unmute' : 'Mute';
+            els.pbVolBtn.setAttribute('aria-label', els.pbVolBtn.title);
+            els.pbVol.value = String(volume);
+        }
+
+        function updateFooter(row, preview) {
+            els.pbDot.style.background = STATION_COLORS[row.stationId] || 'var(--accent)';
+            els.pbStation.textContent = row.stationName;
+            els.pbArtist.textContent = row.artist || '';
+            els.pbArtist.hidden = !row.artist;
+            els.pbTitle.textContent = row.title || row.raw || '';
+            showFooter();
+            updateFooterControls();
+        }
+
+        function setMediaSession(row, preview) {
+            if (!('mediaSession' in navigator)) return;
+            if (!row) {
+                navigator.mediaSession.playbackState = 'none';
+                navigator.mediaSession.metadata = null;
+                return;
+            }
+            try {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: row.title || row.raw || preview.title || '',
+                    artist: row.artist || row.stationName,
+                    album: row.stationName,
+                    artwork: preview && preview.videoId ? [{
+                        src: `https://i.ytimg.com/vi/${preview.videoId}/hqdefault.jpg`,
+                        sizes: '480x360',
+                        type: 'image/jpeg'
+                    }] : []
+                });
+                navigator.mediaSession.playbackState = 'playing';
+            } catch (err) { /* ignore */ }
+        }
+
+        function timerFire() {
+            previewEndTimer = null;
+            if (playToken && queue.length) advanceQueue(true);
+            else stopQueue('Queue finished.');
+        }
+
+        function armPreviewTimer(sampleSec) {
+            clearPreviewTimer();
+            const dur = (Math.max(8, Number(sampleSec) || 25) * 1000) + 2500;
+            sampleDeadline = Date.now() + dur;
+            previewEndTimer = setTimeout(timerFire, dur);
+        }
+
+        function pausePreviewTimer() {
+            if (!previewEndTimer) return;
+            clearPreviewTimer();
+            sampleDeadline = Math.max(0, sampleDeadline - Date.now());
+        }
+
+        function resumePreviewTimer() {
+            clearPreviewTimer();
+            if (sampleDeadline > 0) {
+                previewEndTimer = setTimeout(timerFire, sampleDeadline);
+                sampleDeadline = Date.now() + sampleDeadline;
+            }
+        }
+
+        function stopQueue(status) {
+            playToken += 1;
+            haltPreview();
+            activePlayerKey = null;
+            cuedIndex = -1;
+            paused = false;
+            queue = [];
+            queueIndex = -1;
+            playingRowId = null;
+            currentVideo = null;
+            hideFooter();
+            setMediaSession(null);
+            syncPlayButtons();
+            if (status !== undefined) els.actionStatus.textContent = status;
+        }
+
+        function prepNext() {
+            const token = playToken;
+            const nextRow = queue[queueIndex + 1];
+            if (!nextRow || !canActOnRow(nextRow)) return;
+            const idleKey = activePlayerKey === 'a' ? 'b' : 'a';
+            const idlePlayer = ytPlayers[idleKey];
+            if (!idlePlayer) return;
+
+            // noSearch: during autoplay we'd rather skip a track than stall the
+            // queue on a slow YouTube search fallback. Manual clicks still search.
+            HistoryMedia.resolvePreview(nextRow, { noSearch: true }).then(preview => {
+                if (token !== playToken) return;
+                if (queue[queueIndex + 1] !== nextRow) return;
+                if (cuedIndex === queueIndex + 1) return;
+                const start = Number(preview.startSec) || 40;
+                idlePlayer.cueVideoById({
+                    videoId: preview.videoId,
+                    startSeconds: start,
+                    endSeconds: start + (Number(preview.sampleSec) || 25)
+                });
+                cuedIndex = queueIndex + 1;
+            }).catch(() => { /* skip silently; will load on demand */ });
+
+            // Warm the cache for the next couple of items so advancing is instant.
+            [queue[queueIndex + 2], queue[queueIndex + 3]].forEach(row => {
+                if (row && canActOnRow(row)) HistoryMedia.resolvePreview(row, { noSearch: true }).catch(() => {});
+            });
+        }
+
+        async function startItem(index, automatic) {
+            const row = queue[index];
+            if (!row) {
+                stopQueue('');
+                return;
+            }
+            if (!canActOnRow(row)) {
+                if (automatic) startItem(index + 1, true);
+                else stopQueue('Could not play sample.');
                 return;
             }
 
-            haltPreview();
+            queueIndex = index;
+            playingRowId = row.id;
             const token = ++playToken;
-            playingRowId = rowId;
-            const cached = HistoryMedia.peekPreview(song);
-            els.actionStatus.textContent = cached ? `Playing sample: ${cached.title}` : 'Finding a sample…';
-            syncPlayButtons();
 
+            let preview;
             try {
-                const [preview, player] = await Promise.all([
-                    HistoryMedia.resolvePreview(song),
-                    ensureYtPlayer()
-                ]);
-                if (token !== playToken) return;
-                const start = Number(preview.startSec) || 40;
-                const sample = Number(preview.sampleSec) || 25;
-                player.loadVideoById({
-                    videoId: preview.videoId,
-                    startSeconds: start,
-                    endSeconds: start + sample
-                });
-                armPreviewEnd(sample);
-                els.actionStatus.textContent = `Playing sample: ${preview.title}`;
+                preview = await HistoryMedia.resolvePreview(row, automatic ? { noSearch: true } : undefined);
             } catch (err) {
-                if (token !== playToken) return;
-                haltPreview();
-                playingRowId = null;
-                els.actionStatus.textContent = 'Could not play sample.';
                 console.log(err);
-                syncPlayButtons();
+                if (automatic) {
+                    const q = HistoryMedia.songQuery(row);
+                    els.actionStatus.textContent = `No sample for “${q}” — skipped.`;
+                    startItem(index + 1, true);
+                    return;
+                }
+                stopQueue(`Could not find a sample for “${HistoryMedia.songQuery(row)}”.`);
+                return;
+            }
+            if (token !== playToken) return;
+            currentVideo = { videoId: preview.videoId, title: preview.title };
+
+            const newKey = activePlayerKey === 'a' ? 'b' : 'a';
+            const newPlayer = ytPlayers[newKey];
+            const oldPlayer = activePlayerKey ? ytPlayers[activePlayerKey] : null;
+            if (!newPlayer) {
+                stopQueue('Could not start playback.');
+                return;
+            }
+
+            paused = false;
+            const start = Number(preview.startSec) || 40;
+            const sample = Number(preview.sampleSec) || 25;
+            // Always start via loadVideoById — the same call the old single-player
+            // preview used and the one that reliably produces audio. The idle
+            // player has this video pre-cued, so the load reuses the warm buffer
+            // and starts almost instantly.
+            newPlayer.loadVideoById({
+                videoId: preview.videoId,
+                startSeconds: start,
+                endSeconds: start + sample
+            });
+            // If the video never starts (stuck buffering), surface its ID so it
+            // can be checked against the preview API.
+            setTimeout(() => {
+                if (token !== playToken) return;
+                if (activePlayerKey !== newKey) return;
+                let state = -1;
+                try { state = newPlayer.getPlayerState(); } catch (err) { return; }
+                if (state === YT.PlayerState.PLAYING
+                    || state === YT.PlayerState.PAUSED
+                    || state === YT.PlayerState.ENDED) return;
+                let stateLabel = String(state);
+                if (window.YT && YT.PlayerState) {
+                    const found = Object.keys(YT.PlayerState).find(k => YT.PlayerState[k] === state);
+                    if (found) stateLabel = `${found} (${state})`;
+                }
+                els.actionStatus.textContent = `“${preview.title}” hasn't started (video ID: ${preview.videoId}, state: ${stateLabel}).`;
+            }, 10000);
+            if (oldPlayer) {
+                try { oldPlayer.stopVideo(); } catch (err) { /* ignore */ }
+            }
+            activePlayerKey = newKey;
+            cuedIndex = -1;
+
+            applyVolume(newPlayer);
+            updateFooter(row, preview);
+            syncPlayButtons();
+            setMediaSession(row, preview);
+            armPreviewTimer(sample);
+            els.actionStatus.textContent = `Playing sample: ${preview.title}`;
+        }
+
+        function advanceQueue(automatic) {
+            if (queueIndex + 1 >= queue.length) {
+                stopQueue(automatic ? 'Queue finished.' : '');
+                return;
+            }
+            startItem(queueIndex + 1, automatic);
+        }
+
+        function stepQueue(dir) {
+            if (!queue.length || playingRowId === null) return;
+            const next = queueIndex + dir;
+            if (dir > 0) {
+                if (next >= queue.length) return; // end of queue
+            } else if (next < 0) {
+                startItem(queueIndex, false);     // restart current
+                return;
+            }
+            startItem(next, false);
+        }
+
+        function togglePlayback(force) {
+            const player = activePlayer();
+            if (!player || !playingRowId) return;
+            try {
+                if (force === true || paused) {
+                    player.playVideo();
+                    paused = false;
+                    if (navigator.mediaSession) navigator.mediaSession.playbackState = 'playing';
+                    resumePreviewTimer();
+                } else {
+                    player.pauseVideo();
+                    paused = true;
+                    if (navigator.mediaSession) navigator.mediaSession.playbackState = 'paused';
+                    pausePreviewTimer();
+                }
+            } catch (err) { /* ignore */ }
+            updateFooterControls();
+        }
+
+        async function startQueueFromRow(rowId, song) {
+            if (playingRowId === rowId) {
+                stopQueue('');
+                return;
+            }
+            stopQueue('');
+
+            const visible = applySort(applyFilters(allRows));
+            const startIdx = visible.findIndex(row => row.id === rowId);
+            if (startIdx < 0) return;
+            queue = visible.slice(startIdx).filter(canActOnRow);
+            if (!queue.length) return;
+            queueIndex = -1;
+            cuedIndex = -1;
+            activePlayerKey = null;
+
+            els.actionStatus.textContent = 'Finding a sample…';
+            try {
+                await ensureYtPlayers();
+                await startItem(0, false);
+            } catch (err) {
+                console.log(err);
+                stopQueue('Could not start playback.');
             }
         }
+
+        function initMediaSession() {
+            if (!('mediaSession' in navigator)) return;
+            const setHandler = (action, handler) => {
+                try { navigator.mediaSession.setActionHandler(action, handler); } catch (err) { /* ignore */ }
+            };
+            setHandler('play', () => togglePlayback(true));
+            setHandler('pause', () => togglePlayback(false));
+            setHandler('previoustrack', () => stepQueue(-1));
+            setHandler('nexttrack', () => stepQueue(1));
+            setHandler('stop', () => stopQueue(''));
+        }
+        initMediaSession();
+
+        document.addEventListener('keydown', (event) => {
+            if (!/^(Media|AudioVolume)/.test(event.code || '')) return;
+            const target = event.target;
+            if (target && target.closest && target.closest('input, select, textarea')) return;
+            switch (event.code) {
+                case 'MediaPlayPause':
+                    event.preventDefault();
+                    togglePlayback();
+                    break;
+                case 'MediaTrackNext':
+                    event.preventDefault();
+                    stepQueue(1);
+                    break;
+                case 'MediaTrackPrevious':
+                    event.preventDefault();
+                    stepQueue(-1);
+                    break;
+                case 'AudioVolumeUp':
+                    event.preventDefault();
+                    changeVolume(5);
+                    break;
+                case 'AudioVolumeDown':
+                    event.preventDefault();
+                    changeVolume(-5);
+                    break;
+                case 'AudioVolumeMute':
+                    event.preventDefault();
+                    toggleMute();
+                    break;
+            }
+        });
+
+        els.pbPrev.addEventListener('click', () => stepQueue(-1));
+        els.pbNext.addEventListener('click', () => stepQueue(1));
+        els.pbPlay.addEventListener('click', () => togglePlayback());
+        els.pbVolBtn.addEventListener('click', toggleMute);
+        els.pbVol.addEventListener('input', () => {
+            volume = Number(els.pbVol.value);
+            localStorage.setItem('historyVolume', String(volume));
+            applyVolume();
+            updateFooterControls();
+        });
+        els.pbClose.addEventListener('click', () => stopQueue('Stopped.'));
 
         els.tableWrap.addEventListener('pointerenter', (event) => {
             const btn = event.target.closest('button[data-action="play"]');
@@ -1153,7 +1686,7 @@
             if (!canActOnRow(song)) return;
 
             if (action === 'play') {
-                await playPreview(btn.getAttribute('data-row-id'), song);
+                await startQueueFromRow(btn.getAttribute('data-row-id'), song);
                 return;
             }
 

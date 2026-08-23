@@ -97,7 +97,7 @@
         return previewCache.get(songQuery(song)) || null;
     }
 
-    async function resolvePreview(song) {
+    async function resolvePreview(song, opts) {
         const key = songQuery(song);
         if (previewCache.has(key)) return previewCache.get(key);
 
@@ -122,6 +122,10 @@
         } catch (err) {
             console.log(err);
         }
+
+        // Autoplay prefers to skip a track over waiting on a slow search
+        // fallback; manual actions still search YouTube.
+        if (opts && opts.noSearch) throw new Error('No preview found');
 
         const video = await searchYouTube(song);
         const id = video.id || videoIdFromUrl(video.url);
