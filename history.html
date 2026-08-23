@@ -1211,6 +1211,57 @@
             updateFooterControls();
         }
 
+        // A silent looping <audio> element in THIS document keeps OS media keys
+        // (Media Session) routed to our page. Without it, the embedded YouTube
+        // player owns the audio focus and its own session swallows next/prev.
+        const SILENT_WAV = (() => {
+            const sampleRate = 8000;
+            const seconds = 6;
+            const dataLen = sampleRate * seconds;
+            const buffer = new ArrayBuffer(44 + dataLen);
+            const view = new DataView(buffer);
+            const put = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+            put(0, 'RIFF'); view.setUint32(4, 36 + dataLen, true); put(8, 'WAVE');
+            put(12, 'fmt '); view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+            view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate, true);
+            view.setUint16(32, 1, true); view.setUint16(34, 8, true);
+            put(36, 'data'); view.setUint32(40, dataLen, true);
+            let bin = '';
+            const bytes = new Uint8Array(buffer);
+            for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+            return 'data:audio/wav;base64,' + btoa(bin);
+        })();
+        let mediaAnchor = null;
+
+        function ensureMediaAnchor() {
+            if (mediaAnchor) return mediaAnchor;
+            mediaAnchor = document.createElement('audio');
+            mediaAnchor.loop = true;
+            mediaAnchor.preload = 'auto';
+            mediaAnchor.src = SILENT_WAV;
+            mediaAnchor.volume = 0;
+            mediaAnchor.muted = true;
+            document.body.appendChild(mediaAnchor);
+            return mediaAnchor;
+        }
+
+        // Re-assert audio focus for this document after the YouTube player
+        // starts (or resumes), so hardware media keys reach our handlers.
+        function pokeMediaAnchor() {
+            const anchor = ensureMediaAnchor();
+            try {
+                anchor.pause();
+                anchor.currentTime = 0;
+                anchor.play().catch(() => {});
+            } catch (err) { /* ignore */ }
+        }
+
+        function pauseMediaAnchor() {
+            if (!mediaAnchor) return;
+            try { mediaAnchor.pause(); } catch (err) { /* ignore */ }
+        }
+
         // ---------- YouTube players (two, for gapless switching) ----------
 
         function onPlayerState(key, event) {
@@ -1225,6 +1276,7 @@
                 // Only buffer the next sample once the current one is actually
                 // streaming, so the two embeds don't compete right at load time.
                 prepNext();
+                pokeMediaAnchor();
             } else if (event.data === YT.PlayerState.PAUSED) {
                 paused = true;
                 updateFooterControls();
@@ -1421,6 +1473,7 @@
             queueIndex = -1;
             playingRowId = null;
             currentVideo = null;
+            pauseMediaAnchor();
             hideFooter();
             setMediaSession(null);
             syncPlayButtons();
@@ -1569,6 +1622,7 @@
                     paused = false;
                     if (navigator.mediaSession) navigator.mediaSession.playbackState = 'playing';
                     resumePreviewTimer();
+                    pokeMediaAnchor();
                 } else {
                     player.pauseVideo();
                     paused = true;
@@ -1618,11 +1672,12 @@
         }
         initMediaSession();
 
-        document.addEventListener('keydown', (event) => {
-            if (!/^(Media|AudioVolume)/.test(event.code || '')) return;
+        window.addEventListener('keydown', (event) => {
+            const code = event.code || event.key || '';
+            if (!/^(Media|AudioVolume)/.test(code)) return;
             const target = event.target;
             if (target && target.closest && target.closest('input, select, textarea')) return;
-            switch (event.code) {
+            switch (code) {
                 case 'MediaPlayPause':
                     event.preventDefault();
                     togglePlayback();
