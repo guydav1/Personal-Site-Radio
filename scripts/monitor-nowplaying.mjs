@@ -208,19 +208,23 @@ function pickCurrentGlzSegment(data) {
     return current || segments[segments.length - 1];
 }
 
-function isGlzSongSegment(seg) {
-    if (!seg || typeof seg !== 'object') return false;
-    const title = String(seg.title || seg.Title || '').trim();
-    const artist = String(seg.desc || seg.Desc || seg.artist || seg.Artist || '').trim();
-    if (!title || !artist) return false;
-    const blob = `${artist} ${title}`;
-    if (/מקבוק|פרסומת|תשדיר|מבצע|הלוואה|ביטוח|\bKSP\b|יולי\s*\d+/i.test(blob)) {
-        return false;
+// LiveSchedule: title is the show name; desc carries "artist - song".
+function songFromGlzSegment(seg) {
+    if (!seg || typeof seg !== 'object') return null;
+    const desc = String(seg.desc || seg.Desc || '').trim();
+    if (!desc) return null;
+    if (/מקבוק|פרסומת|תשדיר|מבצע|הלוואה|ביטוח|\bKSP\b|יולי\s*\d+/i.test(desc)) {
+        return null;
     }
-    if (/עשורים עם|מוזיקה ברצף|לינוי וובה|שנות ה-/i.test(blob)) {
-        return false;
+    if (/עשורים עם|מוזיקה ברצף|לינוי וובה|שנות ה-/i.test(desc)) {
+        return null;
     }
-    return true;
+    const parts = desc.split(/\s[-–—]\s/);
+    if (parts.length < 2) return null;
+    const artist = parts[0].trim();
+    const title = parts.slice(1).join(' - ').trim();
+    if (!artist || !title) return null;
+    return { artist, title };
 }
 
 async function collectGlzCurrent(rootId) {
@@ -235,9 +239,9 @@ async function collectGlzCurrent(rootId) {
         jinaEngines: ['browser', 'browser', 'curl']
     });
     const seg = pickCurrentGlzSegment(data);
-    if (!isGlzSongSegment(seg)) return [];
-    const title = String(seg.title || seg.Title || '').trim();
-    const artist = String(seg.desc || seg.Desc || seg.artist || seg.Artist || '').trim();
+    const song = songFromGlzSegment(seg);
+    if (!song) return [];
+    const { artist, title } = song;
     const playedAt = seg.startsUtc || seg.StartsUtc || new Date().toISOString();
     return [{
         artist,

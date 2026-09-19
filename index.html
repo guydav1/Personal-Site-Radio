@@ -125,7 +125,17 @@
             justify-content: center;
         }
 
-        .player {
+        .live-stage {
+            display: flex;
+            align-items: stretch;
+            justify-content: center;
+            gap: 1.15rem;
+            width: 100%;
+            flex-wrap: wrap;
+        }
+
+        .player,
+        .lyrics-panel {
             width: 380px;
             max-width: 100%;
             padding: 1.15em 1.25em 1.35em;
@@ -134,6 +144,90 @@
             border-radius: var(--radius);
             box-shadow: var(--shadow);
             animation: rise 0.45s ease both;
+        }
+
+        .lyrics-panel {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            max-height: min(40rem, calc(100vh - 7.5rem));
+        }
+
+        .lyrics-panel[hidden] {
+            display: none !important;
+        }
+
+        .lyrics-header {
+            font-size: 0.7rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--faint);
+            font-weight: 600;
+            margin-bottom: 0.35rem;
+        }
+
+        .lyrics-match {
+            font-size: 0.88rem;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            color: var(--accent);
+            unicode-bidi: plaintext;
+            word-break: break-word;
+            margin-bottom: 0.6rem;
+            padding-bottom: 0.6rem;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .lyrics-match[hidden] {
+            display: none;
+        }
+
+        .lyrics-body {
+            flex: 1;
+            overflow: auto;
+            overscroll-behavior: contain;
+            white-space: pre-wrap;
+            unicode-bidi: plaintext;
+            font-size: 0.95rem;
+            line-height: 1.55;
+            word-break: break-word;
+            padding-right: 0.5rem;
+        }
+
+        /* Chrome drops the ::-webkit-scrollbar rules below once these are set. */
+        @supports not selector(::-webkit-scrollbar) {
+            .lyrics-body {
+                scrollbar-width: thin;
+                scrollbar-color: var(--line-strong) transparent;
+            }
+        }
+
+        .lyrics-body::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .lyrics-body::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .lyrics-body::-webkit-scrollbar-button {
+            display: none;
+        }
+
+        .lyrics-body::-webkit-scrollbar-thumb {
+            background: var(--line-strong);
+            border-radius: 999px;
+        }
+
+        .lyrics-body::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.28);
+        }
+
+        .lyrics-body.muted {
+            color: var(--muted);
+            font-style: italic;
+            font-weight: 500;
+            white-space: normal;
         }
 
         .header {
@@ -163,13 +257,47 @@
             text-align: center;
         }
 
+        .now-playing-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.6rem;
+            margin-bottom: 0.4em;
+        }
+
         .now-playing-label {
             font-size: 0.7rem;
             letter-spacing: 0.08em;
             text-transform: uppercase;
             color: var(--faint);
-            margin-bottom: 0.4em;
             font-weight: 600;
+        }
+
+        button.lyrics-toggle {
+            border: 1px solid var(--line);
+            background: transparent;
+            color: var(--muted);
+            font: inherit;
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 0.28rem 0.7rem;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+        }
+
+        button.lyrics-toggle:hover {
+            color: var(--text);
+            border-color: var(--line-strong);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        button.lyrics-toggle[aria-pressed="true"] {
+            color: #14110a;
+            background: var(--accent);
+            border-color: var(--accent);
         }
 
         #songMeta {
@@ -338,13 +466,19 @@
     </header>
 
     <main class="page">
+    <div class="live-stage">
     <div class="player">
         <div class="header">
             <h1 id="title">Playing: ...</h1>
         </div>
 
         <div class="now-playing">
-            <div class="now-playing-label">Now playing</div>
+            <div class="now-playing-top">
+                <div class="now-playing-label">Now playing</div>
+                <button id="lyricsBtn" class="lyrics-toggle" type="button" aria-pressed="false" aria-controls="lyricsPanel">
+                    Lyrics
+                </button>
+            </div>
             <div id="songMeta" class="unknown">Waiting for song info…</div>
             <div class="meta-actions">
                 <button id="downloadBtn" class="icon-btn" type="button" title="Download MP3" aria-label="Download MP3" disabled>
@@ -377,6 +511,12 @@
         </div>
         <audio id="player" controls></audio>
     </div>
+    <aside class="lyrics-panel" id="lyricsPanel" hidden role="region" aria-label="Song lyrics">
+        <div class="lyrics-header">Lyrics</div>
+        <div class="lyrics-match" id="lyricsMatch" hidden></div>
+        <div class="lyrics-body muted" id="lyricsBody" aria-live="polite">Waiting for song info…</div>
+    </aside>
+    </div>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.7/dist/hls.min.js"></script>
@@ -387,6 +527,10 @@
         const downloadBtn = document.getElementById('downloadBtn');
         const youtubeBtn = document.getElementById('youtubeBtn');
         const identifyBtn = document.getElementById('identifyBtn');
+        const lyricsBtn = document.getElementById('lyricsBtn');
+        const lyricsPanel = document.getElementById('lyricsPanel');
+        const lyricsBody = document.getElementById('lyricsBody');
+        const lyricsMatch = document.getElementById('lyricsMatch');
         const downloadStatus = document.getElementById('downloadStatus');
         let hlsPlayer = null;
         let awaitingPlayGesture = false;
@@ -452,6 +596,10 @@
         let metaPollTimer = null;
         let downloadBusy = false;
         let identifyBusy = false;
+        let lyricsOn = false;
+        let lyricsRequestId = 0;
+        let lyricsAbort = null;
+        let lyricsSongKey = '';
         const channelSongs = {};
 
         const channelsList = document.getElementById('channels');
@@ -575,6 +723,7 @@
                 downloadBtn.disabled = true;
                 youtubeBtn.disabled = true;
                 changeTitle(selectedChannel);
+                syncLyricsPanel();
                 return;
             }
 
@@ -602,6 +751,8 @@
                     album: (channel && channel.name) || ''
                 });
             }
+
+            syncLyricsPanel();
         }
 
         // Selected-channel helper used by ICY / identify / legacy call sites.
@@ -911,15 +1062,16 @@
             if (!data) return null;
             const seg = pickCurrentGlzSegment(data) || data;
             if (!seg || typeof seg !== 'object') return null;
-            // Live player: title = song, desc = artist (e.g. Maps / Yeah Yeah Yeahs).
-            const title = (seg.title || seg.Title || '').trim();
-            const artist = (seg.desc || seg.Desc || seg.artist || seg.Artist || '').trim();
-            // Require artist — show/promo blocks often have a title with no desc.
-            if (!title || !artist) return null;
-            if (/מקבוק|פרסומת|תשדיר|מבצע|\bKSP\b|יולי\s*\d+|עשורים עם|מוזיקה ברצף|שנות ה-/i.test(`${artist} ${title}`)) {
+            // LiveSchedule: title is the show name; desc carries "artist - song".
+            const desc = (seg.desc || seg.Desc || '').trim();
+            if (!desc) return null;
+            if (/מקבוק|פרסומת|תשדיר|מבצע|\bKSP\b|יולי\s*\d+|עשורים עם|מוזיקה ברצף|שנות ה-/i.test(desc)) {
                 return null;
             }
-            return parseStreamTitle(`${artist} - ${title}`);
+            const song = parseStreamTitle(desc);
+            // Show/promo blocks have no "artist - song" split.
+            if (!song || !song.artist) return null;
+            return song;
         }
 
         async function songFromGlzPayload(data, label) {
@@ -1419,6 +1571,280 @@
             return normalizeMatchText(songQuery(song));
         }
 
+        function stopLyricsFetch() {
+            lyricsRequestId += 1;
+            if (lyricsAbort) {
+                lyricsAbort.abort();
+                lyricsAbort = null;
+            }
+        }
+
+        // LRCLIB rows sometimes repeat a field ("One Kiss;One Kiss").
+        function cleanLyricsField(value) {
+            const parts = String(value || '')
+                .split(/[;\u001f]/)
+                .map(part => part.trim())
+                .filter(Boolean);
+            return [...new Set(parts)][0] || '';
+        }
+
+        function setLyricsMatch(record) {
+            if (!record) {
+                lyricsMatch.textContent = '';
+                lyricsMatch.hidden = true;
+                return;
+            }
+            const artist = cleanLyricsField(record.artistName);
+            const title = cleanLyricsField(record.trackName || record.name);
+            lyricsMatch.textContent = artist ? `${artist} — ${title}` : title;
+            lyricsMatch.hidden = !lyricsMatch.textContent;
+        }
+
+        function setLyricsStatus(message) {
+            setLyricsMatch(null);
+            lyricsBody.classList.add('muted');
+            lyricsBody.textContent = message;
+        }
+
+        function showLyricsText(text, record) {
+            setLyricsMatch(record);
+            lyricsBody.classList.remove('muted');
+            lyricsBody.textContent = text;
+            lyricsBody.scrollTop = 0;
+        }
+
+        function lyricsTextFromRecord(record) {
+            if (!record) return '';
+            if (record.instrumental && !record.plainLyrics && !record.syncedLyrics) {
+                return '';
+            }
+            const plain = String(record.plainLyrics || '').trim();
+            const raw = plain || String(record.syncedLyrics || '').trim();
+            if (!raw) return '';
+            const stripped = plain
+                ? raw
+                : raw
+                    .split('\n')
+                    .map(line => line.replace(/^\s*\[[^\]]*]\s?/, '').trimEnd())
+                    .join('\n');
+            return stripped.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim();
+        }
+
+        function primaryArtistName(artist) {
+            return String(artist || '').split(/[,&]|\bfeat\.?\b|\bft\.?\b/i)[0].trim();
+        }
+
+        // Radio tags append remaster / live / remix notes LRCLIB doesn't carry.
+        function simplifyTrackTitle(title) {
+            return String(title || '')
+                .replace(/\s*[\(\[][^\)\]]*[\)\]]\s*$/, '')
+                .replace(/\s[-–—]\s.*$/, '')
+                .trim();
+        }
+
+        function lyricsSearchAttempts(song) {
+            const artist = (song.artist || '').trim();
+            const title = (song.title || '').trim() || (song.raw || '').trim();
+            const attempts = [];
+            const seen = new Set();
+            const add = (params) => {
+                const key = params.toString();
+                if (!key || seen.has(key)) return;
+                seen.add(key);
+                attempts.push(params);
+            };
+            if (title) {
+                const primary = new URLSearchParams({ track_name: title });
+                if (artist) primary.set('artist_name', artist);
+                add(primary);
+                const leadArtist = primaryArtistName(artist);
+                if (leadArtist && leadArtist !== artist) {
+                    const narrowed = new URLSearchParams({ track_name: title });
+                    narrowed.set('artist_name', leadArtist);
+                    add(narrowed);
+                }
+                const trimmed = simplifyTrackTitle(title);
+                if (trimmed && trimmed !== title) {
+                    const loose = new URLSearchParams({ track_name: trimmed });
+                    if (leadArtist) loose.set('artist_name', leadArtist);
+                    add(loose);
+                }
+                add(new URLSearchParams({ track_name: title }));
+            }
+            const q = songQuery(song);
+            if (q) add(new URLSearchParams({ q }));
+            return attempts;
+        }
+
+        // Hebrew tags and LRCLIB entries mix scripts (מאיר אריאל ↔ Meir Ariel), so both
+        // sides are compared in Latin form as well.
+        function lyricsHaystack(value) {
+            const raw = String(value || '');
+            return `${normalizeMatchText(raw)} ${transliterateHebrewVariants(raw)}`.trim();
+        }
+
+        // A Hebrew word counts as one needle however many romanizations it has, so
+        // "רייכל" hitting "Raichel" through any spelling is full coverage.
+        function lyricsCoverage(value, haystack) {
+            const raw = String(value || '');
+            if (!raw.trim() || !haystack) return 0;
+
+            const groups = [];
+            for (const word of raw.split(/\s+/)) {
+                const variants = new Set(matchTokens(word));
+                if (hasHebrew(word)) {
+                    for (const map of HEBREW_LATIN_MAPS) {
+                        for (const token of matchTokens(transliterateHebrewWithMap(word, map))) {
+                            variants.add(token);
+                        }
+                    }
+                }
+                if (variants.size) groups.push([...variants]);
+            }
+            if (!groups.length) return 0;
+
+            const hits = groups.filter(group => group.some(token => softTokenHit(token, haystack)));
+            return hits.length / groups.length;
+        }
+
+        function lyricsRichness(record) {
+            const synced = String(record.syncedLyrics || '').trim().length;
+            const plain = String(record.plainLyrics || '').trim().length;
+            return (synced ? 1000000 : 0) + plain + synced;
+        }
+
+        function scoreLyricsRecord(record, song) {
+            const text = lyricsTextFromRecord(record);
+            if (!text && !record.instrumental) return null;
+
+            const songTitle = (song.title || song.raw || '').trim();
+            const songArtist = (song.artist || '').trim();
+            const recTitle = String(record.trackName || record.name || '');
+            const recArtist = String(record.artistName || '');
+            const recTitleHaystack = lyricsHaystack(recTitle);
+            const recArtistHaystack = lyricsHaystack(recArtist);
+
+            const titleCov = Math.max(
+                lyricsCoverage(songTitle, recTitleHaystack),
+                lyricsCoverage(simplifyTrackTitle(songTitle), recTitleHaystack)
+            );
+            // Radio credits list every featured artist; LRCLIB often keeps only the lead.
+            const artistCov = songArtist
+                ? Math.max(
+                    lyricsCoverage(songArtist, recArtistHaystack),
+                    lyricsCoverage(primaryArtistName(songArtist), recArtistHaystack)
+                )
+                : 1;
+            // Extra words in the LRCLIB title usually mean a different song or version.
+            const titleFit = lyricsCoverage(recTitle, lyricsHaystack(songTitle));
+
+            if (titleCov < 0.6 || artistCov < 0.7) return null;
+
+            let confidence = titleCov * 0.55 + artistCov * 0.3 + titleFit * 0.15;
+            if (normalizeMatchText(recTitle) === normalizeMatchText(songTitle)) confidence += 0.05;
+            if (songArtist && normalizeMatchText(recArtist) === normalizeMatchText(songArtist)) confidence += 0.05;
+
+            return { record, confidence: Math.min(confidence, 1) };
+        }
+
+        function pickLyricsRecord(records, song) {
+            if (!Array.isArray(records)) return null;
+            let best = null;
+            for (const rec of records) {
+                if (!rec) continue;
+                const scored = scoreLyricsRecord(rec, song);
+                if (!scored) continue;
+                if (
+                    !best ||
+                    scored.confidence > best.confidence + 0.02 ||
+                    (Math.abs(scored.confidence - best.confidence) <= 0.02 &&
+                        lyricsRichness(rec) > lyricsRichness(best.record))
+                ) {
+                    best = scored;
+                }
+            }
+            return best;
+        }
+
+        async function searchLyrics(song, signal) {
+            let best = null;
+            let lastError = null;
+            for (const params of lyricsSearchAttempts(song)) {
+                const res = await fetch('https://lrclib.net/api/search?' + params.toString(), {
+                    signal,
+                    headers: { 'Lrclib-Client': 'Personal-Site-Radio live lyrics' }
+                });
+                if (!res.ok) {
+                    lastError = new Error('Lyrics search failed');
+                    continue;
+                }
+                const picked = pickLyricsRecord(await res.json(), song);
+                if (picked && (!best || picked.confidence > best.confidence)) best = picked;
+                // Exact hit — no need to widen the search.
+                if (best && best.confidence >= 0.9) break;
+            }
+            if (best) return best.record;
+            throw lastError || new Error('Lyrics not found');
+        }
+
+        function setLyricsEnabled(on) {
+            lyricsOn = !!on;
+            lyricsBtn.setAttribute('aria-pressed', String(lyricsOn));
+            lyricsPanel.hidden = !lyricsOn;
+            if (!lyricsOn) {
+                stopLyricsFetch();
+                lyricsSongKey = '';
+                setLyricsStatus('Waiting for song info…');
+                return;
+            }
+            lyricsSongKey = '';
+            syncLyricsPanel(true);
+        }
+
+        function syncLyricsPanel(force) {
+            if (!lyricsOn) return;
+
+            lyricsPanel.hidden = false;
+            if (!canDownloadSong(currentSong)) {
+                stopLyricsFetch();
+                lyricsSongKey = '';
+                setLyricsStatus(
+                    currentSong && currentSong.downloadable === false
+                        ? 'No lyrics for this program.'
+                        : 'Waiting for song info…'
+                );
+                return;
+            }
+
+            const key = songCacheKey(currentSong);
+            if (!force && key === lyricsSongKey) return;
+
+            stopLyricsFetch();
+            const requestId = lyricsRequestId;
+            const song = currentSong;
+            lyricsSongKey = key;
+            lyricsAbort = new AbortController();
+            setLyricsStatus('Fetching lyrics…');
+
+            searchLyrics(song, lyricsAbort.signal).then(record => {
+                if (requestId !== lyricsRequestId || !lyricsOn) return;
+                if (record.instrumental && !lyricsTextFromRecord(record)) {
+                    setLyricsStatus('Instrumental — no lyrics.');
+                    return;
+                }
+                const text = lyricsTextFromRecord(record);
+                if (!text) {
+                    setLyricsStatus('No lyrics found.');
+                    return;
+                }
+                showLyricsText(text, record);
+            }).catch(err => {
+                if (requestId !== lyricsRequestId || !lyricsOn) return;
+                if (err && err.name === 'AbortError') return;
+                setLyricsStatus('No lyrics found.');
+            });
+        }
+
         function hasHebrew(value) {
             return /[\u0590-\u05FF]/.test(String(value || ''));
         }
@@ -1456,13 +1882,16 @@
         }
 
         // Radio tags use many romanizations (hofshi/chofshi, ze/zh, pe/fe…).
+        const HEBREW_LATIN_MAPS = [
+            HEBREW_LATIN_BASE,
+            { ...HEBREW_LATIN_BASE, ה: 'e', פ: 'f', ח: 'ch' },
+            { ...HEBREW_LATIN_BASE, ה: 'a', פ: 'f', ח: 'kh', ו: 'u', ב: 'v' },
+            // Raichel / Michaeli spellings where כ is written ch.
+            { ...HEBREW_LATIN_BASE, כ: 'ch', ך: 'ch', ה: 'e', ו: 'u' }
+        ];
+
         function transliterateHebrewVariants(value) {
-            const maps = [
-                HEBREW_LATIN_BASE,
-                { ...HEBREW_LATIN_BASE, ה: 'e', פ: 'f', ח: 'ch' },
-                { ...HEBREW_LATIN_BASE, ה: 'a', פ: 'f', ח: 'kh', ו: 'u', ב: 'v' }
-            ];
-            const parts = maps
+            const parts = HEBREW_LATIN_MAPS
                 .map(map => transliterateHebrewWithMap(value, map))
                 .filter(Boolean);
             return [...new Set(parts.join(' ').split(' '))].join(' ');
@@ -1966,6 +2395,7 @@
 
         downloadBtn.addEventListener('click', downloadCurrentSong);
         identifyBtn.addEventListener('click', () => identifyCurrentSong());
+        lyricsBtn.addEventListener('click', () => setLyricsEnabled(!lyricsOn));
 
         youtubeBtn.addEventListener('click', async () => {
             if (!canDownloadSong(currentSong)) return;
